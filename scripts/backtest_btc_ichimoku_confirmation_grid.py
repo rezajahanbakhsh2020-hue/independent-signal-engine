@@ -210,7 +210,9 @@ def main() -> int:
     output = {
         "kind": "btc_ichimoku_confirmation_grid_backtest",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "market": MARKET, "timeframe": TIMEFRAME, "window_days_requested": LOOKBACK_DAYS,\n        "selection_window_days": 245, "untouched_out_of_sample_days": 120,\n        "selection_rule": "rank combinations on first 245 days only; inspect final 120 days separately",
+        "market": MARKET, "timeframe": TIMEFRAME, "window_days_requested": LOOKBACK_DAYS,
+        "selection_window_days": 245, "untouched_out_of_sample_days": 120,
+        "selection_rule": "rank combinations on first 245 days only; inspect final 120 days separately",
         "initial_equity": INITIAL_EQUITY, "risk": vars(risk), "costs_bps_per_fill": vars(costs),
         "fixed_base_rules": {
             "ichimoku": "9/26/52; use cloud visibly plotted at current candle without future leakage",
@@ -223,7 +225,8 @@ def main() -> int:
             "ema_trend": "price and EMA20 above EMA50 for long; both below for short",
             "adx_direction": "ADX(14) >= 20 and DI direction agrees with side",
         },
-        "data_provenance": provenance, "results": rows,\n        "best_by_selection_window": {"confirmations": selected["confirmations"], "strategy": selected["strategy"], "first_245_days_selection_window": selected["first_245_days_selection_window"], "final_120_days_out_of_sample": selected["final_120_days_out_of_sample"]},
+        "data_provenance": provenance, "results": rows,
+        "best_by_selection_window": {"confirmations": selected["confirmations"], "strategy": selected["strategy"], "first_245_days_selection_window": selected["first_245_days_selection_window"], "final_120_days_out_of_sample": selected["final_120_days_out_of_sample"]},
         "limitations": [
             "Exploratory grid search; choosing the best of six combinations creates selection bias.",
             "One year of historical BTC 1H data is not evidence of future profitability.",
