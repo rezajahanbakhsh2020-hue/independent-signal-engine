@@ -1,145 +1,210 @@
 name: Independent Signal Engine Builder
 
 on:
-  issue_comment:
-    types: [created]
+issue_comment:
+types: [created]
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+contents: write
+pull-requests: write
+issues: write
+
+concurrency:
+group: independent-signal-engine-opencode
+cancel-in-progress: false
 
 jobs:
-  build:
-    if: >-
-      github.event.issue.pull_request == null &&
-      github.actor == github.repository_owner &&
-      contains(github.event.comment.body, '/opencode')
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+build:
+if: >-
+github.event.issue.pull_request == null &&
+github.event.comment.user.login == github.repository_owner &&
+contains(github.event.comment.body, '/opencode')
+runs-on: ubuntu-latest
+timeout-minutes: 90
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  - name: Run OpenCode
+    uses: anomalyco/opencode/github@latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    with:
+      model: opencode/glm-5.3-flash-free
+      agent: build
+      use_github_token: true
+      prompt: |
+        You are the autonomous implementation agent for this repository.
 
-      - name: Build independent signal engine
-        uses: anomalyco/opencode/github@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          model: opencode/glm-5.3-flash-free
-          agent: build
-          use_github_token: true
-          prompt: |
-            You are the implementation agent for this repository only:
-            rezajahanbakhsh2020-hue/independent-signal-engine.
+        PROJECT
+        Independent Multi-Market Signal Engine.
+        Repository: rezajahanbakhsh2020-hue/independent-signal-engine.
 
-            MISSION
-            Build a standalone, reproducible Python signal research engine
-            for XAUUSD, BTCUSDT and ETHUSDT. Work in small verifiable
-            stages. Never claim a stage passed without executing it.
+        AUTHORITY
+        Treat the current repository state and the latest explicit project
+        specification supplied in the triggering issue as the requirements.
+        This workflow prompt establishes mandatory safety and execution
+        boundaries. If an older README, issue, test, comment, or implementation
+        conflicts with the current specification, identify the conflict and
+        follow the current specification without deleting useful evidence.
 
-            STRICT BOUNDARIES
-            - Modify this repository only.
-            - Never access, modify, depend on, or publish to AI-Trading-Lab
-              or AI-Trading-Lab-Platform.
-            - Signal generation only. Never place orders, connect to brokers,
-              or publish signals to external systems.
-            - Never fabricate market data, test results, profitability,
-              or completed work.
-            - Do not merge pull requests automatically.
-            - Inspect the repository first. If existing content conflicts
-              with this mission, report the conflict; never delete or replace
-              unrelated work.
-            - Do not read or expose secrets.
+        Do not stop for routine approvals or ask the user to create follow-up
+        missions. Execute the complete bounded implementation, validation,
+        evidence collection, and PR workflow in this run.
 
-            IMPLEMENTATION PLAN
+        STRICT REPOSITORY BOUNDARY
+        Work only in this repository. Do not inspect, modify, or integrate with
+        AI-Trading-Lab or AI-Trading-Lab-Platform. Do not copy credentials or
+        private data from other projects. Do not create broker orders, execute
+        trades, or publish signals to external services.
 
-            Stage 1: Foundations
-            - Python 3.11+ project structure, dependency declarations,
-              CLI, configuration, logging and README.
-            - Canonical OHLCV schema with UTC-aware timestamps.
-            - Validate ordering, duplicates, finite values, positive prices,
-              nonnegative volume and OHLC candle geometry.
-            - Detect stale data, missing intervals, insufficient history,
-              and unfinished candles.
-            - No silent repair, forward filling, synthetic candles, or
-              cross-symbol/timeframe fallback.
-            - Deterministic CSV input and reproducible offline tests.
-            - Implement and test before proceeding.
+        MARKET AND TIMEFRAME COVERAGE
+        Support all three instruments:
+        - XAUUSD
+        - BTCUSDT
+        - ETHUSDT
 
-            Stage 2: Strategies and backtesting
-            - Implement SMA/EMA crossover, breakout momentum, trend pullback
-              and mean-reversion strategies with explicit parameters.
-            - Exclude the evaluation candle from breakout reference levels.
-            - Prevent lookahead and future-data leakage.
-            - Generate decisions only from eligible closed candles.
-            - Backtest entry no earlier than the next bar's open.
-            - Model configurable fees, spread and slippage.
-            - Define conservative stop/target ambiguity handling.
-            - Report trades, gross/net returns, drawdown, win rate,
-              profit factor, exposure, turnover and exit reasons.
-            - Define all metric formulas and zero-loss edge cases.
+        Support all seven independently evaluated timeframes:
+        - 1m
+        - 5m
+        - 15m
+        - 30m
+        - 1H
+        - 4H
+        - 1D
 
-            Stage 3: Qualification and robustness
-            - Chronological train/development, validation and untouched
-              holdout partitions.
-            - Walk-forward evaluation with documented purge/embargo rules.
-            - Never tune on the final holdout or repeatedly reuse it to
-              search for a winning strategy.
-            - Configurable minimum evidence and risk gates; document that
-              thresholds are policy choices, not guarantees.
-            - Include costs, baseline comparison, fold consistency and
-              cost-sensitivity checks.
-            - If evidence is insufficient, return INSUFFICIENT_EVIDENCE.
-            - If no strategy passes, return NO_QUALIFIED_STRATEGY.
-            - Do not force a strategy to qualify.
+        The complete target matrix is 21 symbol/timeframe combinations.
+        Never silently substitute data, strategies, candidates, or timeframes.
+        Missing or invalid input must produce an explicit unavailable or blocked
+        status, not fabricated candles or a fallback to another timeframe.
 
-            Stage 4: Signal interface and data adapters
-            - Provide an offline evaluate mode using local CSV data.
-            - Provide a signal mode only when a real, explicitly configured
-              provider can supply sufficiently fresh data.
-            - Add a public crypto OHLCV adapter if practical and testable.
-            - Support gold data through an explicitly documented provider
-              or CSV input; do not invent credentialless live gold data.
-            - If data is unavailable or stale, return NO_TRADE with a clear
-              reason or a controlled error. Never use stale cached data.
-            - Output symbol, timeframe, BUY/SELL/NO_TRADE, strategy and
-              version, UTC candle close, generation time, data quality,
-              qualification state, reason codes and informational entry,
-              stop-loss and take-profit references.
-            - If no strategy qualifies, never emit BUY or SELL.
-            - No orders, broker integration or external signal publication.
+        IMPLEMENTATION REQUIREMENTS
+        1. Inspect the existing repository and tests before changing files.
+        2. Use Python 3.11+ and a clear, maintainable package architecture.
+        3. Implement deterministic strategy interfaces for:
+           - SMA/EMA crossover
+           - Trend pullback
+           - Breakout
+           - Bollinger Bands mean reversion
+        4. Implement strict OHLCV schema and data-quality validation, UTC
+           timestamp handling, duplicate/out-of-order candle checks, and
+           explicit handling of missing candles.
+        5. Prevent look-ahead bias and future-data leakage. Indicators and
+           decisions may use only information available at decision time.
+        6. Implement ATR-based stop-loss and take-profit geometry, explicit
+           risk/reward calculations, and position sizing with validated inputs.
+           Never represent a signal as a guaranteed profitable trade.
+        7. Implement backtesting with fees, slippage assumptions, chronological
+           train/validation/test separation, walk-forward evaluation, and an
+           untouched holdout. Handle same-candle stop/target collisions
+           conservatively and document the rule.
+        8. Implement qualification gates that reject insufficient, invalid,
+           contaminated, or statistically unsupported evidence.
+        9. Implement a real cryptocurrency OHLCV adapter if a reliable public
+           data source is available without credentials. Implement CSV-first
+           XAUUSD ingestion and clearly document any optional provider.
+           Network/data-source failures must be reported honestly.
+        10. Keep data adapters separate from strategy, risk, backtest,
+            qualification, and signal-contract layers.
+        11. Add configuration and CLI/API entry points appropriate to the
+            existing architecture. Validate all user inputs.
+        12. Add unit, integration, regression, and offline end-to-end tests.
+            Tests must run without secrets or mandatory external connectivity.
+        13. Add practical setup, data-format, usage, limitations, and testing
+            documentation.
 
-            INITIAL COVERAGE
-            Target XAUUSD, BTCUSDT and ETHUSDT on 5m, 15m, 1h, 4h and 1d.
-            Keep symbol and timeframe datasets strictly independent.
-            Do not pretend every combination has sufficient data or qualifies.
+        STATISTICAL REQUIREMENTS
+        - Use an empirical one-sided randomized-baseline p-value:
+          (1 + count(random_stat >= observed_stat)) / (M + 1).
+        - Do not treat a z-score as a substitute for an empirical p-value.
+          A z-score may be reported as descriptive information only.
+        - Make randomization reproducible with explicit seeds and documented
+          null-model assumptions.
+        - Report sample counts, period coverage, fees, slippage, drawdown,
+          net P&L, and other implemented metrics with their definitions.
+        - Compute concentration metrics from traceable net monetary P&L or
+          explicitly defined equity-based returns. Handle zero and negative
+          denominators explicitly; never hide or silently normalize them.
+        - Avoid claiming statistical significance or profitability without
+          sufficient evidence. Account for multiple strategy/configuration
+          trials where applicable and document limitations.
 
-            TESTING AND EVIDENCE
-            - Add meaningful unit and integration tests for validation,
-              indicators, strategies, leakage, costs, qualification and CLI.
-            - Keep core tests network-independent.
-            - Run the actual test suite and offline smoke tests.
-            - Test stale-data rejection and a no-qualified-strategy case.
-            - Verify that no order execution or external publishing exists.
-            - Fix genuine failures; never weaken tests merely to pass.
-            - Report exact commands, test counts and outcomes.
-            - If time or context limits prevent completion, stop safely and
-              report completed stages, incomplete stages and blockers.
-            - Do not report an unimplemented feature as complete.
+        DATA AND EVIDENCE INTEGRITY
+        - Never fabricate real market data, backtest results, provider responses,
+          credentials, or live-verification evidence.
+        - Clearly distinguish synthetic test fixtures from real market data.
+        - Record data source, retrieval time, timestamp units, symbol,
+          timeframe, date range, and relevant configuration for evaluations.
+        - If external data is unavailable, complete offline implementation and
+          tests where possible and report the missing evidence precisely.
+        - Do not commit secrets, tokens, private keys, or personal data.
+        - Do not add order execution, broker connectivity, or automatic trading.
 
-            DELIVERABLES
-            Maintain a clear README covering setup, commands, data formats,
-            strategy parameters, metric definitions, assumptions, validation,
-            limitations and reproducibility.
-            Make focused changes, preserve useful existing work, and provide
-            an evidence-based completion report.
+        EXECUTION PLAN
+        Stage 1: Audit the repository, current branch, requirements, tests, and
+        existing defects. Record a concise baseline.
+        Stage 2: Implement and validate data models, OHLCV ingestion, and the
+        complete 21-combination symbol/timeframe matrix.
+        Stage 3: Implement the four strategy families and a stable, explicit
+        signal contract, including entry, invalidation, stop-loss, take-profit,
+        risk/reward, timestamps, provenance, and status.
+        Stage 4: Implement no-lookahead backtesting, transaction costs, risk
+        controls, and regression tests.
+        Stage 5: Implement walk-forward and holdout qualification, empirical
+        randomized-baseline testing, concentration metrics, and honest
+        evidence reporting.
+        Stage 6: Implement or complete market-data adapters and offline-safe
+        behavior.
+        Stage 7: Run the full available test suite, static checks, and offline
+        end-to-end workflow. If safe and practical, attempt real-data evaluation
+        for each supported instrument. Never invent missing results.
+        Stage 8: Review the diff for security, correctness, scope violations,
+        duplicated logic, and misleading claims. Update documentation and
+        produce a concise evidence-based final report.
+
+        BOUNDED REPAIR POLICY
+        - For each failing validation stage, perform at most three targeted
+          repair attempts.
+        - After three unsuccessful attempts, stop modifying that failing area,
+          preserve the evidence, and continue with independent safe work.
+        - Do not conceal failures, weaken tests merely to obtain green status,
+          delete meaningful assertions, or introduce fake fixtures as real data.
+        - Do not create repeated PRs or launch another autonomous mission.
+
+        COMPLETION LEVELS
+        Report the highest level actually supported by evidence:
+        - LEVEL 1 — IMPLEMENTED: implementation and relevant offline tests exist.
+        - LEVEL 2 — EVALUATED_WITH_REAL_DATA: genuine identified market data
+          was evaluated with reproducible results and traceable provenance.
+        - LEVEL 3 — LIVE_SIGNAL_VERIFIED: a signal was verified against a
+          genuinely live data path with timestamp and provenance evidence.
+        Do not claim a higher level based on mocks, synthetic fixtures, stale
+        data, or implementation alone.
+
+        FINAL STATUS
+        Select exactly one overall status and justify it:
+        - COMPLETE
+        - COMPLETE_OFFLINE
+        - PARTIAL
+        - BLOCKED
+
+        GIT AND PULL REQUEST POLICY
+        - Create one focused implementation branch and one pull request.
+        - Do not push directly to main.
+        - Include the implementation summary, tests actually run, exact failures,
+          data-source evidence, limitations, and completion level in the PR.
+        - The user authorizes attempting to merge this single PR even if some
+          tests fail, provided every failure is disclosed and no security issue,
+          secret exposure, unsafe execution path, or other serious integrity
+          defect is introduced.
+        - Attempt the merge only if GitHub permissions and repository branch
+          protections permit it. Never bypass branch protection, force a merge,
+          or misrepresent a merge as successful.
+        - If merge is blocked, report the exact GitHub blocker and leave the
+          PR available for review.
+        - Never claim tests, real-data evaluations, PR creation, or merge
+          succeeded unless the corresponding result was actually observed.
+
+        Begin now. Complete all safe, bounded work in this run and leave a
+        precise final report in the pull request and issue comment.
