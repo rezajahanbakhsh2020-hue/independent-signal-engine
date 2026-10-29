@@ -75,6 +75,26 @@ def test_success_path_provenance(monkeypatch):
     assert df.attrs["coverage_start_utc"] is not None
 
 
+def test_arbitrary_usdt_pair_is_supported(monkeypatch):
+    now_ms = 1600000000000
+    klines = [
+        [now_ms + i * 3600000, "10.0", "11.0", "9.0", "10.5", "100.0",
+         now_ms + i * 3600000 + 3599999, "0", 1, "1", "0", "0"]
+        for i in range(5)
+    ]
+    seen = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req.full_url)
+        return make_fake_urlopen(json.dumps(klines).encode())(req, timeout)
+
+    monkeypatch.setattr("signal_engine.data.binance_source.urllib.request.urlopen", fake_urlopen)
+    df = fetch_range("SOLUSDT", "1H", pd.Timestamp("2020-09-13T12:00", tz="UTC"),
+                     pd.Timestamp("2020-09-13T17:00", tz="UTC"))
+    assert df.attrs["symbol_mapping"] == "SOLUSDT->SOLUSDT"
+    assert "symbol=SOLUSDT" in seen[0]
+
+
 def test_geo_blocked_primary_uses_official_mirror(monkeypatch):
     now_ms = 1600000000000
     klines = [
