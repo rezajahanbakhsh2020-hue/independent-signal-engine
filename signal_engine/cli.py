@@ -20,6 +20,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from datetime import timedelta
 
 import pandas as pd
 
@@ -97,6 +98,43 @@ def cmd_validate_csv(args) -> int:
     return 0
 
 
+_TIMEFRAME_DURATION = {
+    "1m": timedelta(minutes=1),
+    "5m": timedelta(minutes=5),
+    "15m": timedelta(minutes=15),
+    "30m": timedelta(minutes=30),
+    "1H": timedelta(hours=1),
+    "4H": timedelta(hours=4),
+    "1D": timedelta(days=1),
+}
+
+
+def _freshness_report(df: pd.DataFrame, timeframe: str, max_age_hours: float | None) -> dict:
+    """Check that the newest candle is closed and recent; never call stale data current."""
+    now = pd.Timestamp.now(tz="UTC")
+    duration = _TIMEFRAME_DURATION[timeframe]
+    latest_open = pd.Timestamp(df.index[-1]).tz_convert("UTC")
+    latest_close = latest_open + duration
+    age_hours = (now - latest_close).total_seconds() / 3600.0
+    allowed_hours = max_age_hours if max_age_hours is not None else duration.total_seconds() * 3 / 3600.0
+    result = {
+        "checked_at_utc": now.isoformat(),
+        "latest_candle_open_utc": latest_open.isoformat(),
+        "latest_candle_close_utc": latest_close.isoformat(),
+        "age_since_close_hours": round(age_hours, 6),
+        "max_age_hours": allowed_hours,
+        "is_closed": latest_close <= now,
+        "is_fresh": latest_close <= now and age_hours <= allowed_hours,
+    }
+    if latest_close > now:
+        result["reason"] = "latest_candle_not_closed"
+    elif age_hours > allowed_hours:
+        result["reason"] = "stale_data"
+    else:
+        result["reason"] = None
+    return result
+
+
 def cmd_signal(args) -> int:
     market = validate_market(args.market)
     tf = validate_timeframe(args.timeframe)
@@ -119,6 +157,25 @@ def cmd_signal(args) -> int:
             out["validation"] = exc.report.as_dict()
         print(json.dumps(out, indent=2))
         return 1
+    freshness = None
+    if not args.synthetic:
+        freshness = _freshness_report(df, tf, args.max_age_hours)
+        if not freshness["is_fresh"]:
+            out = {
+                "kind": "latest_signal_check",
+                "market": market,
+                "timeframe": tf,
+                "strategy": args.strategy,
+                "provenance": provenance,
+                "decision": {"label": "NO TRADE", "reason": freshness["reason"]},
+                "pending_raw_direction": None,
+                "freshness": freshness,
+                "validation": rep.as_dict(),
+                "research_only": "stale or unfinished data is rejected; no profitability is implied",
+            }
+            print(json.dumps(out, indent=2))
+            return 0
+
     risk, _costs = _risk_and_costs(args)
     params = _kv_params(args.param)
     strategy_cls = STRATEGY_REGISTRY[args.strategy]
@@ -134,6 +191,7 @@ def cmd_signal(args) -> int:
     )
     out["strategy_params"] = params
     out["validation"] = rep.as_dict()
+    out["freshness"] = freshness or {"checked": False, "reason": "synthetic_test_demo_fixture"}
     print(json.dumps(out, indent=2))
     return 0
 
@@ -454,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--synthetic-seed", type=int, default=42)
     s.add_argument("--market", required=True, choices=MARKETS)
     s.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
+    s.add_argument("--max-age-hours", type=float, default=None, help="Override freshness limit; default is three candle durations")
     s.set_defaults(func=cmd_signal)
 
     r = sub.add_parser("report", help="Full report for one market/timeframe")
