@@ -147,7 +147,11 @@ signal-engine signal --market XAUUSD --timeframe 1H \
 
 Computes the most recent decision the engine's uniform execution semantics
 would have acted on from genuinely recent closed candles (fetch them with
-`fetch-crypto`/`fetch-gold` first). Semantics mirror the backtester exactly:
+`fetch-crypto`/`fetch-gold` first). By default, the latest candle must be closed
+and no older than three candle durations; stale or still-open candles return
+`NO TRADE` with a freshness reason. `--max-age-hours N` explicitly overrides
+the freshness limit when intentionally researching historical data. Synthetic
+fixtures skip freshness checks and remain clearly labeled. Semantics mirror the backtester exactly:
 
 - the decision acted at candle *t* derives from the strategy direction at
   *t-1* (evidence candle),
@@ -288,10 +292,13 @@ else concentration = Σ (net_pnl[i] / positive_pnl)² for net_pnl[i] > 0
 
 ## 16. Known limitations and honest-scoping notes
 
-- Only user-supplied CSVs (offline path) and the public Binance adapter
-  (crypto only) are wired. **XAUUSD historical data must be provided as
-  CSV**; there is no free public gold feed, so the engine cannot and does
-  not claim any XAUUSD live/historical coverage by itself.
+- Data sources: user-supplied OHLCV CSVs for any supported market; the public
+  Binance API/mirror for BTCUSDT and ETHUSDT; and the public BiQuote OHLC API
+  for XAUUSD. Provider coverage differs: BiQuote did not provide 1m XAUUSD bars
+  in the verified run and returned too few intraday candles for the configured
+  walk-forward minimum. The engine reports those cells as unavailable or
+  insufficient instead of inventing candles. Additional XAUUSD 1m history may
+  be supplied via CSV or a separately verified provider.
 - Simulated `end_of_data` close-outs, `stop-first` filling on same-candle
   stop/target collisions, and bid/ask approximations via half-spread are
   conservative but simplified; they cannot be claimed to exactly reproduce
@@ -324,6 +331,8 @@ signal_engine/
   data/validate.py      strict OHLCV validation
   data/csv_source.py    CSV loader, resampling (coarser-only)
   data/binance_source.py public Binance klines adapter (BTC/ETH only)
+  data/biquote_source.py public XAUUSD OHLC adapter (tick-volume semantics)
+  latest_signal.py      latest decision and freshness gate
   data/synthetic.py     deterministic synthetic OHLCV (tests/demos, labeled)
 tests/                  200+ focused tests incl. lookahead/leakage regressions
 ```
