@@ -1,4 +1,4 @@
-"""Strategy tests: all four families, causality, identifier coverage."""
+"""Strategy tests: registered families, causality, identifier coverage."""
 from __future__ import annotations
 
 import numpy as np
@@ -11,18 +11,20 @@ from signal_engine.strategies import (
     BreakoutStrategy,
     CrossoverStrategy,
     PullbackStrategy,
+    IchimokuRsiConfirmedStrategy,
     STRATEGY_REGISTRY,
 )
 
 ALL_STRATEGIES = sorted(STRATEGY_REGISTRY)
 
 
-def test_registry_has_all_four_families():
+def test_registry_has_all_strategy_families():
     assert set(STRATEGY_REGISTRY) == {
         "crossover",
         "pullback",
         "breakout",
         "bollinger_mean_reversion",
+        "ichimoku_rsi_confirmed",
     }
 
 
@@ -83,6 +85,15 @@ def test_bollinger_param_validation():
 def test_breakout_param_validation():
     with pytest.raises(ValueError):
         BreakoutStrategy(lookback=1)
+
+
+def test_ichimoku_param_validation():
+    with pytest.raises(ValueError):
+        IchimokuRsiConfirmedStrategy(tenkan_window=1)
+    with pytest.raises(ValueError):
+        IchimokuRsiConfirmedStrategy(displacement=-1)
+    with pytest.raises(ValueError):
+        IchimokuRsiConfirmedStrategy(rsi_midline=100)
 
 
 @pytest.mark.parametrize("tf", TIMEFRAMES)
