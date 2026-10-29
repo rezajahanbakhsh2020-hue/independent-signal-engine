@@ -8,6 +8,7 @@ Subcommands:
 - report          : produce a full JSON report for one market/timeframe
 - matrix          : run the engine across the complete 21-cell matrix
 - fetch-crypto    : fetch BTCUSDT/ETHUSDT klines from the public Binance API
+- fetch-gold      : fetch closed XAUUSD OHLC candles from the public BiQuote API
 
 All costs expressed in basis points. Provenance and honest statuses are
 included in every JSON output.
@@ -24,6 +25,7 @@ import pandas as pd
 from signal_engine.backtest import backtest, CostConfig
 from signal_engine.constants import MARKETS, TIMEFRAMES, validate_market, validate_timeframe
 from signal_engine.data.csv_source import read_csv_ohlcv
+from signal_engine.data.validate import DataValidationError
 from signal_engine.data.synthetic import synth_ohlcv
 from signal_engine.report import evaluate_cell, matrix_cells, report_to_json
 from signal_engine.risk import RiskConfig
@@ -81,7 +83,14 @@ def _kv_params(pairs: list[str]) -> dict:
 
 # ----------------------------------------------------------------- commands
 def cmd_validate_csv(args) -> int:
-    df, rep = read_csv_ohlcv(args.csv, expected_spacing=args.expected_spacing)
+    try:
+        _df, rep = read_csv_ohlcv(args.csv, expected_spacing=args.expected_spacing)
+    except DataValidationError as exc:
+        out = {"ok": False, "error": str(exc)}
+        if exc.report is not None:
+            out["validation"] = exc.report.as_dict()
+        print(json.dumps(out, indent=2))
+        return 1
     out = {"ok": True, "validation": rep.as_dict()}
     print(json.dumps(out, indent=2))
     return 0
@@ -313,6 +322,43 @@ def cmd_fetch_crypto(args) -> int:
     return 0
 
 
+def cmd_fetch_gold(args) -> int:
+    from signal_engine.data.biquote_source import BiQuoteUnavailableError, fetch_range
+
+    try:
+        df = fetch_range(
+            "XAUUSD",
+            args.timeframe,
+            pd.Timestamp(args.start),
+            pd.Timestamp(args.end),
+        )
+    except (BiQuoteUnavailableError, DataValidationError) as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
+        return 1
+
+    out_path = Path(args.out)
+    df.reset_index().to_csv(out_path, index=False)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "market": "XAUUSD",
+                "timeframe": args.timeframe,
+                "n_candles": len(df),
+                "coverage_start_utc": df.index[0].isoformat(),
+                "coverage_end_utc": df.index[-1].isoformat(),
+                "retrieval_time_utc": df.attrs.get("retrieval_time_utc"),
+                "source": df.attrs.get("source"),
+                "volume_semantics": df.attrs.get("volume_semantics"),
+                "validation": df.attrs.get("validation_report"),
+                "out": str(out_path),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="signal-engine",
@@ -389,6 +435,13 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--end", required=True)
     f.add_argument("--out", required=True)
     f.set_defaults(func=cmd_fetch_crypto)
+
+    g = sub.add_parser("fetch-gold", help="Fetch public XAUUSD OHLC candles from BiQuote")
+    g.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
+    g.add_argument("--start", required=True, help="UTC start, e.g. 2025-01-01T00:00:00Z")
+    g.add_argument("--end", required=True, help="UTC end, e.g. 2025-02-01T00:00:00Z")
+    g.add_argument("--out", required=True)
+    g.set_defaults(func=cmd_fetch_gold)
 
     args = p.parse_args(argv)
     return args.func(args)

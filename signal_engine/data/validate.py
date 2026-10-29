@@ -23,6 +23,10 @@ OPTIONAL_COLUMNS = ("timestamp", "time", "date", "datetime")
 class DataValidationError(ValueError):
     """Raised when a dataset is fundamentally unusable (schema collapse)."""
 
+    def __init__(self, message: str, report: "ValidationReport | None" = None):
+        super().__init__(message)
+        self.report = report
+
 
 @dataclass
 class ValidationReport:
@@ -88,9 +92,20 @@ def _check_ohlc_relations(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFra
 
 
 def _check_finite(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFrame:
+    def is_finite_number(value) -> bool:
+        # pandas may yield Python/numpy integers as well as floats. Accept
+        # finite numeric values of either kind; reject missing, booleans and
+        # values that cannot safely be converted to a finite float.
+        if pd.isna(value) or isinstance(value, bool):
+            return False
+        try:
+            return math.isfinite(float(value))
+        except (TypeError, ValueError, OverflowError):
+            return False
+
     bad = pd.Series(False, index=df.index)
     for col in REQUIRED_COLUMNS:
-        bad |= ~df[col].map(lambda x: isinstance(x, float) and math.isfinite(x))
+        bad |= ~df[col].map(is_finite_number)
     # also treat NaN in volume as rejection
     n_bad = int(bad.sum())
     if n_bad:
@@ -207,7 +222,7 @@ def validate_ohlcv(
     df = _check_volume(df, rep)
 
     if df.empty:
-        raise DataValidationError("All rows rejected during validation")
+        raise DataValidationError("All rows rejected during validation", report=rep)
 
     # 5. gaps (documented, never filled).
     spacing = dominant_spacing(df.index)

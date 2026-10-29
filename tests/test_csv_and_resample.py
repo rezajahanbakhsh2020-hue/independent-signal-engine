@@ -1,9 +1,11 @@
 """CSV loading, resampling, and provenance tests."""
 from __future__ import annotations
 
+import json
 import pandas as pd
 import pytest
 
+from signal_engine.cli import main
 from signal_engine.data.csv_source import read_csv_ohlcv, resample_ohlcv
 from signal_engine.data.synthetic import synth_ohlcv
 from signal_engine.data.validate import DataValidationError
@@ -72,3 +74,18 @@ def test_resample_30m_to_1d_deterministic(tmp_path):
     o1 = resample_ohlcv(df, "30m", "1D")
     o2 = resample_ohlcv(df.copy(), "30m", "1D")
     pd.testing.assert_frame_equal(o1, o2)
+
+def test_cli_validate_csv_all_rejected_reports_audit(tmp_path, capsys):
+    p = tmp_path / "all_rejected.csv"
+    p.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2024-01-01T00:00:00Z,100,99,101,100,10\n"
+        "2024-01-01T01:00:00Z,100,99,101,100,10\n"
+    )
+    exit_code = main(["validate-csv", "--csv", str(p)])
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert payload["ok"] is False
+    assert payload["validation"]["rows_in"] == 2
+    assert payload["validation"]["rows_out"] == 0
+    assert payload["validation"]["rejection_reasons"]["invalid_ohlc_relationship"] == 2
