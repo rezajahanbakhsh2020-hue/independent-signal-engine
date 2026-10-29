@@ -266,21 +266,21 @@ def backtest(
                             sig = None
                     if sig is not None:
                         entry_fill = costs.enter_fill(sig_side, float(opens[t]))
-                    entry_fee = costs.fee_on(entry_fill * sig.position_size)
-                    equity -= entry_fee
-                    t_open = Trade(
-                        side=sig_side,
-                        market=market,
-                        timeframe=timeframe,
-                        strategy=strategy.name,
-                        signal_ts=index[t - 1],
-                        entry_ts=ts,
-                        entry_price=entry_fill,
-                        stop_price=sig.stop,
-                        target_price=sig.target,
-                        qty=sig.position_size,
-                        fees=entry_fee,
-                    )
+                        entry_fee = costs.fee_on(entry_fill * sig.position_size)
+                        equity -= entry_fee
+                        t_open = Trade(
+                            side=sig_side,
+                            market=market,
+                            timeframe=timeframe,
+                            strategy=strategy.name,
+                            signal_ts=index[t - 1],
+                            entry_ts=ts,
+                            entry_price=entry_fill,
+                            stop_price=sig.stop,
+                            target_price=sig.target,
+                            qty=sig.position_size,
+                            fees=entry_fee,
+                        )
 
         # 3. mark-to-market at close.
         if t_open is not None:
