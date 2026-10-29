@@ -191,13 +191,46 @@ def test_cli_signal_on_real_csv_exit_zero(tmp_path, capsys):
         [
             "signal", "--market", "XAUUSD", "--timeframe", "1H",
             "--csv", str(path), "--strategy", "crossover",
-            "--param", "fast=2", "--param", "slow=4",
+            "--param", "fast=2", "--param", "slow=4", "--max-age-hours", "100000",
         ]
     )
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
     assert payload["decision"]["label"] == "SELL"
     assert payload["provenance"] == f"csv:{path}"
+
+
+def test_cli_signal_rejects_stale_csv_fail_closed(tmp_path, capsys):
+    end = pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(hours=10)
+    start = (end - pd.Timedelta(hours=39)).strftime("%Y-%m-%d %H:%M:%S")
+    df = _candles(list(np.linspace(100, 200, 40)), period="60min", start=start)
+    df.index.name = "timestamp"
+    path = tmp_path / "stale.csv"
+    df.reset_index().to_csv(path, index=False)
+    rc = cli_main([
+        "signal", "--market", "BTCUSDT", "--timeframe", "1H",
+        "--csv", str(path), "--strategy", "crossover",
+    ])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["decision"] == {"label": "NO TRADE", "reason": "stale_data"}
+    assert payload["freshness"]["is_fresh"] is False
+
+
+def test_cli_signal_rejects_unclosed_latest_candle(tmp_path, capsys):
+    end = pd.Timestamp.now(tz="UTC").floor("h")
+    start = (end - pd.Timedelta(hours=39)).strftime("%Y-%m-%d %H:%M:%S")
+    df = _candles(list(np.linspace(100, 200, 40)), period="60min", start=start)
+    df.index.name = "timestamp"
+    path = tmp_path / "unclosed.csv"
+    df.reset_index().to_csv(path, index=False)
+    rc = cli_main([
+        "signal", "--market", "BTCUSDT", "--timeframe", "1H",
+        "--csv", str(path), "--strategy", "crossover",
+    ])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["decision"] == {"label": "NO TRADE", "reason": "latest_candle_not_closed"}
 
 
 def test_cli_signal_rejects_bad_csv_fail_closed(tmp_path, capsys):
