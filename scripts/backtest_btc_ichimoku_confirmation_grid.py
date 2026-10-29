@@ -177,7 +177,7 @@ def main() -> int:
     start = end - pd.Timedelta(days=LOOKBACK_DAYS)
     df = fetch_range(MARKET, TIMEFRAME, start, end)
     df = df.loc[df.index + BAR_DURATION <= end].copy()
-    if len(df) < 5000:
+    if len(df) < 1200:
         raise RuntimeError(f"Expected roughly one year of closed BTC 4H candles; received only {len(df)}")
     provenance = {
         "source": df.attrs.get("source", "unknown"),
