@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from signal_engine.constants import BINANCE_SYMBOLS, TIMEFRAME_TO_BINANCE
+from signal_engine.constants import BINANCE_SYMBOLS, TIMEFRAME_TO_BINANCE, validate_crypto_symbol
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
 BASE_URLS = (
@@ -80,13 +80,7 @@ def fetch_klines(
     timeout_seconds: int = 30,
 ) -> list[list]:
     """Fetch one page of klines. Raises BinanceUnavailableError on failure."""
-    from signal_engine.constants import validate_market
-
-    symbol = validate_market(symbol)
-    if not symbol.endswith("USDT") or symbol == "XAUUSD":
-        raise DataValidationError(
-            f"Symbol {symbol!r} is not a supported Binance USDT spot symbol"
-        )
+    symbol = validate_crypto_symbol(symbol)
     if interval not in TIMEFRAME_TO_BINANCE.values():
         raise DataValidationError(f"Unsupported interval {interval!r}")
     payload, _host = _fetch_klines_with_host(
@@ -104,15 +98,11 @@ def fetch_range(
     max_requests: int = 250,
 ) -> pd.DataFrame:
     """Fetch a full [start, end) range by paging, without inventing candles."""
-    from signal_engine.constants import validate_market, validate_timeframe
+    from signal_engine.constants import validate_timeframe
 
-    market = validate_market(symbol)
+    market = validate_crypto_symbol(symbol)
     tf = validate_timeframe(timeframe)
     symbol = BINANCE_SYMBOLS.get(market, market)
-    if not symbol.endswith("USDT"):
-        raise DataValidationError(
-            f"Market {market!r} is not supported by the Binance USDT adapter"
-        )
     interval = TIMEFRAME_TO_BINANCE[tf]
     start_ms = int(start_utc.timestamp() * 1000)
     end_ms = int(end_utc.timestamp() * 1000)
