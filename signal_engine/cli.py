@@ -321,6 +321,43 @@ def cmd_fetch_crypto(args) -> int:
     return 0
 
 
+def cmd_fetch_gold(args) -> int:
+    from signal_engine.data.biquote_source import BiQuoteUnavailableError, fetch_range
+
+    try:
+        df = fetch_range(
+            "XAUUSD",
+            args.timeframe,
+            pd.Timestamp(args.start),
+            pd.Timestamp(args.end),
+        )
+    except (BiQuoteUnavailableError, DataValidationError) as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
+        return 1
+
+    out_path = Path(args.out)
+    df.reset_index().to_csv(out_path, index=False)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "market": "XAUUSD",
+                "timeframe": args.timeframe,
+                "n_candles": len(df),
+                "coverage_start_utc": df.index[0].isoformat(),
+                "coverage_end_utc": df.index[-1].isoformat(),
+                "retrieval_time_utc": df.attrs.get("retrieval_time_utc"),
+                "source": df.attrs.get("source"),
+                "volume_semantics": df.attrs.get("volume_semantics"),
+                "validation": df.attrs.get("validation_report"),
+                "out": str(out_path),
+            },
+            indent=2,
+        )
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         prog="signal-engine",
@@ -397,6 +434,13 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--end", required=True)
     f.add_argument("--out", required=True)
     f.set_defaults(func=cmd_fetch_crypto)
+
+    g = sub.add_parser("fetch-gold", help="Fetch public XAUUSD OHLC candles from BiQuote")
+    g.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
+    g.add_argument("--start", required=True, help="UTC start, e.g. 2025-01-01T00:00:00Z")
+    g.add_argument("--end", required=True, help="UTC end, e.g. 2025-02-01T00:00:00Z")
+    g.add_argument("--out", required=True)
+    g.set_defaults(func=cmd_fetch_gold)
 
     args = p.parse_args(argv)
     return args.func(args)
