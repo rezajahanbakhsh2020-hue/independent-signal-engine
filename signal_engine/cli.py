@@ -26,7 +26,7 @@ from datetime import timedelta
 import pandas as pd
 
 from signal_engine.backtest import backtest, CostConfig
-from signal_engine.constants import MARKETS, TIMEFRAMES, validate_market, validate_timeframe
+from signal_engine.constants import MARKETS, TIMEFRAMES, validate_market, validate_market_or_crypto_symbol, validate_timeframe
 from signal_engine.data.csv_source import read_csv_ohlcv
 from signal_engine.data.validate import DataValidationError
 from signal_engine.data.synthetic import synth_ohlcv
@@ -139,7 +139,7 @@ def _freshness_report(df: pd.DataFrame, timeframe: str, max_age_hours: float | N
 
 
 def cmd_signal(args) -> int:
-    market = validate_market(args.market)
+    market = validate_market_or_crypto_symbol(args.market)
     tf = validate_timeframe(args.timeframe)
     from signal_engine.data.validate import validate_ohlcv
     from signal_engine.latest_signal import latest_decision_report
@@ -393,7 +393,8 @@ def cmd_matrix(args) -> int:
 def cmd_fetch_crypto(args) -> int:
     from signal_engine.data.binance_source import BinanceUnavailableError, fetch_range
 
-    market = validate_market(args.market)
+    from signal_engine.constants import validate_crypto_symbol
+    market = validate_crypto_symbol(args.market)
     tf = validate_timeframe(args.timeframe)
     try:
         df = fetch_range(
@@ -513,7 +514,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--synthetic-start", default="2024-01-01")
     s.add_argument("--synthetic-n", type=int, default=2000)
     s.add_argument("--synthetic-seed", type=int, default=42)
-    s.add_argument("--market", required=True, choices=MARKETS)
+    s.add_argument("--market", required=True, help="Market or USDT crypto pair such as SOLUSDT")
     s.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
     s.add_argument("--max-age-hours", type=float, default=None, help="Override freshness limit; default is three candle durations")
     s.set_defaults(func=cmd_signal)
