@@ -80,7 +80,10 @@ def fetch_klines(
     timeout_seconds: int = 30,
 ) -> list[list]:
     """Fetch one page of klines. Raises BinanceUnavailableError on failure."""
-    symbol = validate_crypto_symbol(symbol)
+    try:
+        symbol = validate_crypto_symbol(symbol)
+    except ValueError as exc:
+        raise DataValidationError(str(exc)) from exc
     if interval not in TIMEFRAME_TO_BINANCE.values():
         raise DataValidationError(f"Unsupported interval {interval!r}")
     payload, _host = _fetch_klines_with_host(
@@ -100,7 +103,10 @@ def fetch_range(
     """Fetch a full [start, end) range by paging, without inventing candles."""
     from signal_engine.constants import validate_timeframe
 
-    market = validate_crypto_symbol(symbol)
+    try:
+        market = validate_crypto_symbol(symbol)
+    except ValueError as exc:
+        raise DataValidationError(str(exc)) from exc
     tf = validate_timeframe(timeframe)
     symbol = BINANCE_SYMBOLS.get(market, market)
     interval = TIMEFRAME_TO_BINANCE[tf]
