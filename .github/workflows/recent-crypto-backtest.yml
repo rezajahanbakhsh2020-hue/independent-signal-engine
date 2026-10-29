@@ -1,0 +1,33 @@
+name: Recent Crypto Strategy Backtest
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "scripts/backtest_recent_crypto.py"
+      - ".github/workflows/recent-crypto-backtest.yml"
+    branches:
+      - opencode/issue1-20261029151352
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install engine
+        run: python -m pip install -e .
+      - name: Run 16 backtests on real closed Binance candles
+        run: python scripts/backtest_recent_crypto.py
+      - name: Upload full results
+        uses: actions/upload-artifact@v4
+        with:
+          name: recent-crypto-backtest
+          path: artifacts/
+          retention-days: 14
