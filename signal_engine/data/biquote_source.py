@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from signal_engine.constants import TIMEFRAMES, TIMEFRAME_TO_PANDAS, validate_market, validate_timeframe
+from signal_engine.constants import validate_market, validate_timeframe
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
 BASE_URL = "https://biquote.io/api/XAUUSD/ohlc"
