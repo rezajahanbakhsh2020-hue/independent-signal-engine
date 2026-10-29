@@ -153,8 +153,25 @@ paging aborts the request rather than mixing sources. If both official hosts
 fail, a `BinanceUnavailableError` is raised — **no fake fallback data is ever
 substituted**.
 
----
 
+For gold (XAUUSD), use the public BiQuote OHLC endpoint (no API key):
+
+```bash
+signal-engine fetch-gold --timeframe 1H \
+  --start 2026-01-01T00:00:00Z --end 2026-02-01T00:00:00Z \
+  --out XAUUSD_1H.csv
+```
+
+The adapter requests only XAUUSD, excludes the still-open candle, pages
+backward within the provider's 1,000-bar request limit, and records requested
+range, actual coverage, validation gaps, retrieval time, and source provenance.
+BiQuote may report zero traded volume for FX/CFD bars; the adapter uses
+`tickVolume` as a tick-count proxy and explicitly labels it as **not
+exchange-traded volume**. This is not mapped to BTCUSDT/ETHUSDT: BTCUSD and
+BTCUSDT are different instruments and are never silently substituted.
+
+---
+ 
 ## 10. CSV schema
 
 | Column | Meaning | Notes |
