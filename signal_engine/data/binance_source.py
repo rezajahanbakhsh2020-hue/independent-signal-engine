@@ -1,4 +1,4 @@
-"""Public Binance market-data adapter (BTCUSDT / ETHUSDT only).
+"""Public Binance market-data adapter for Binance USDT spot symbols.
 
 Uses the public REST endpoint `api.binance.com` via stdlib urllib so no
 extra dependency is required and no credentials exist anywhere.
@@ -80,10 +80,12 @@ def fetch_klines(
     timeout_seconds: int = 30,
 ) -> list[list]:
     """Fetch one page of klines. Raises BinanceUnavailableError on failure."""
-    if symbol not in BINANCE_SYMBOLS:
+    from signal_engine.constants import validate_market
+
+    symbol = validate_market(symbol)
+    if not symbol.endswith("USDT") or symbol == "XAUUSD":
         raise DataValidationError(
-            f"Symbol {symbol!r} not supported by the Binance adapter; "
-            f"supported: {', '.join(BINANCE_SYMBOLS)}"
+            f"Symbol {symbol!r} is not a supported Binance USDT spot symbol"
         )
     if interval not in TIMEFRAME_TO_BINANCE.values():
         raise DataValidationError(f"Unsupported interval {interval!r}")
@@ -106,7 +108,11 @@ def fetch_range(
 
     market = validate_market(symbol)
     tf = validate_timeframe(timeframe)
-    symbol = BINANCE_SYMBOLS[market]
+    symbol = BINANCE_SYMBOLS.get(market, market)
+    if not symbol.endswith("USDT"):
+        raise DataValidationError(
+            f"Market {market!r} is not supported by the Binance USDT adapter"
+        )
     interval = TIMEFRAME_TO_BINANCE[tf]
     start_ms = int(start_utc.timestamp() * 1000)
     end_ms = int(end_utc.timestamp() * 1000)
