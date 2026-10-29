@@ -549,8 +549,8 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--seed", type=int, default=20260101)
     m.set_defaults(func=cmd_matrix)
 
-    f = sub.add_parser("fetch-crypto", help="Fetch public klines for BTCUSDT/ETHUSDT")
-    f.add_argument("--market", required=True, choices=("BTCUSDT", "ETHUSDT"))
+    f = sub.add_parser("fetch-crypto", help="Fetch public klines for any Binance USDT crypto pair")
+    f.add_argument("--market", required=True, help="Any valid Binance USDT pair, e.g. SOLUSDT or ADAUSDT")
     f.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
     f.add_argument("--start", required=True, help="UTC start, e.g. 2025-01-01T00:00")
     f.add_argument("--end", required=True)
