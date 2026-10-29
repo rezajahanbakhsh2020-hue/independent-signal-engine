@@ -8,7 +8,7 @@ Subcommands:
 - report          : produce a full JSON report for one market/timeframe
 - matrix          : run the engine across the complete 21-cell matrix
 - signal          : latest BUY/SELL/NO TRADE decision check on real recent candles
-- fetch-crypto    : fetch BTCUSDT/ETHUSDT klines from the public Binance API
+- fetch-crypto    : fetch public klines for any valid Binance USDT crypto pair
 - fetch-gold      : fetch closed XAUUSD OHLC candles from the public BiQuote API
 
 All costs expressed in basis points. Provenance and honest statuses are
