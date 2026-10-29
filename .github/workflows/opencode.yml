@@ -1,210 +1,366 @@
 name: Independent Signal Engine Builder
 
 on:
-issue_comment:
-types: [created]
+  issue_comment:
+    types: [created]
 
 permissions:
-contents: write
-pull-requests: write
-issues: write
+  contents: write
+  pull-requests: write
+  issues: write
 
 concurrency:
-group: independent-signal-engine-opencode
-cancel-in-progress: false
+  group: independent-signal-engine-opencode
+  cancel-in-progress: false
 
 jobs:
-build:
-if: >-
-github.event.issue.pull_request == null &&
-github.event.comment.user.login == github.repository_owner &&
-contains(github.event.comment.body, '/opencode')
-runs-on: ubuntu-latest
-timeout-minutes: 90
+  build:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.comment.user.login == github.repository_owner &&
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
 
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Run OpenCode
-    uses: anomalyco/opencode/github@latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    with:
-      model: opencode/glm-5.3-flash-free
-      agent: build
-      use_github_token: true
-      prompt: |
-        You are the autonomous implementation agent for this repository.
+      - name: Run OpenCode
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/glm-5.3-flash-free
+          agent: build
+          use_github_token: true
+          prompt: |
+            You are the autonomous implementation agent for this repository.
 
-        PROJECT
-        Independent Multi-Market Signal Engine.
-        Repository: rezajahanbakhsh2020-hue/independent-signal-engine.
+            PROJECT
+            Independent Multi-Market Signal Engine.
+            Repository: rezajahanbakhsh2020-hue/independent-signal-engine.
 
-        AUTHORITY
-        Treat the current repository state and the latest explicit project
-        specification supplied in the triggering issue as the requirements.
-        This workflow prompt establishes mandatory safety and execution
-        boundaries. If an older README, issue, test, comment, or implementation
-        conflicts with the current specification, identify the conflict and
-        follow the current specification without deleting useful evidence.
+            MISSION AUTHORITY
+            Inspect the current repository, its existing requirements, source code,
+            tests, documentation, and the triggering issue. Treat the current
+            project specification in the issue as the functional requirements.
+            This workflow defines the mandatory execution, integrity, and safety
+            rules. Resolve conflicting older requirements in favor of the current
+            specification and document material conflicts.
 
-        Do not stop for routine approvals or ask the user to create follow-up
-        missions. Execute the complete bounded implementation, validation,
-        evidence collection, and PR workflow in this run.
+            Execute the complete mission autonomously in this run. Do not request
+            intermediate approval, create follow-up missions, or stop merely to
+            report routine progress. Complete all safe work within the time limit.
 
-        STRICT REPOSITORY BOUNDARY
-        Work only in this repository. Do not inspect, modify, or integrate with
-        AI-Trading-Lab or AI-Trading-Lab-Platform. Do not copy credentials or
-        private data from other projects. Do not create broker orders, execute
-        trades, or publish signals to external services.
+            STRICT REPOSITORY BOUNDARY
+            Work exclusively in this repository.
+            Do not inspect, modify, or integrate with AI-Trading-Lab or
+            AI-Trading-Lab-Platform.
+            Do not copy credentials, data, code, or private information from those
+            projects.
+            Do not place broker orders, execute trades, or publish signals to
+            external services.
+            This project is a research and signal-generation engine, not an
+            automated execution system.
 
-        MARKET AND TIMEFRAME COVERAGE
-        Support all three instruments:
-        - XAUUSD
-        - BTCUSDT
-        - ETHUSDT
+            REQUIRED INSTRUMENTS AND TIMEFRAMES
+            Instruments:
+            - XAUUSD
+            - BTCUSDT
+            - ETHUSDT
 
-        Support all seven independently evaluated timeframes:
-        - 1m
-        - 5m
-        - 15m
-        - 30m
-        - 1H
-        - 4H
-        - 1D
+            Independently supported timeframes:
+            - 1m
+            - 5m
+            - 15m
+            - 30m
+            - 1H
+            - 4H
+            - 1D
 
-        The complete target matrix is 21 symbol/timeframe combinations.
-        Never silently substitute data, strategies, candidates, or timeframes.
-        Missing or invalid input must produce an explicit unavailable or blocked
-        status, not fabricated candles or a fallback to another timeframe.
+            The complete target matrix contains 21 instrument/timeframe
+            combinations. Implement explicit support and validation for every
+            combination. Do not claim that a combination works unless its actual
+            implementation and relevant tests support that claim.
 
-        IMPLEMENTATION REQUIREMENTS
-        1. Inspect the existing repository and tests before changing files.
-        2. Use Python 3.11+ and a clear, maintainable package architecture.
-        3. Implement deterministic strategy interfaces for:
-           - SMA/EMA crossover
-           - Trend pullback
-           - Breakout
-           - Bollinger Bands mean reversion
-        4. Implement strict OHLCV schema and data-quality validation, UTC
-           timestamp handling, duplicate/out-of-order candle checks, and
-           explicit handling of missing candles.
-        5. Prevent look-ahead bias and future-data leakage. Indicators and
-           decisions may use only information available at decision time.
-        6. Implement ATR-based stop-loss and take-profit geometry, explicit
-           risk/reward calculations, and position sizing with validated inputs.
-           Never represent a signal as a guaranteed profitable trade.
-        7. Implement backtesting with fees, slippage assumptions, chronological
-           train/validation/test separation, walk-forward evaluation, and an
-           untouched holdout. Handle same-candle stop/target collisions
-           conservatively and document the rule.
-        8. Implement qualification gates that reject insufficient, invalid,
-           contaminated, or statistically unsupported evidence.
-        9. Implement a real cryptocurrency OHLCV adapter if a reliable public
-           data source is available without credentials. Implement CSV-first
-           XAUUSD ingestion and clearly document any optional provider.
-           Network/data-source failures must be reported honestly.
-        10. Keep data adapters separate from strategy, risk, backtest,
-            qualification, and signal-contract layers.
-        11. Add configuration and CLI/API entry points appropriate to the
-            existing architecture. Validate all user inputs.
-        12. Add unit, integration, regression, and offline end-to-end tests.
-            Tests must run without secrets or mandatory external connectivity.
-        13. Add practical setup, data-format, usage, limitations, and testing
-            documentation.
+            Every instrument/timeframe combination must retain its own explicit
+            identity and evaluation context. Never silently substitute another
+            timeframe, instrument, dataset, strategy, or configuration.
+            Missing data, invalid inputs, unavailable providers, and failed
+            qualification must result in explicit statuses, not fabricated data
+            or hidden fallback behavior.
 
-        STATISTICAL REQUIREMENTS
-        - Use an empirical one-sided randomized-baseline p-value:
-          (1 + count(random_stat >= observed_stat)) / (M + 1).
-        - Do not treat a z-score as a substitute for an empirical p-value.
-          A z-score may be reported as descriptive information only.
-        - Make randomization reproducible with explicit seeds and documented
-          null-model assumptions.
-        - Report sample counts, period coverage, fees, slippage, drawdown,
-          net P&L, and other implemented metrics with their definitions.
-        - Compute concentration metrics from traceable net monetary P&L or
-          explicitly defined equity-based returns. Handle zero and negative
-          denominators explicitly; never hide or silently normalize them.
-        - Avoid claiming statistical significance or profitability without
-          sufficient evidence. Account for multiple strategy/configuration
-          trials where applicable and document limitations.
+            IMPLEMENTATION REQUIREMENTS
 
-        DATA AND EVIDENCE INTEGRITY
-        - Never fabricate real market data, backtest results, provider responses,
-          credentials, or live-verification evidence.
-        - Clearly distinguish synthetic test fixtures from real market data.
-        - Record data source, retrieval time, timestamp units, symbol,
-          timeframe, date range, and relevant configuration for evaluations.
-        - If external data is unavailable, complete offline implementation and
-          tests where possible and report the missing evidence precisely.
-        - Do not commit secrets, tokens, private keys, or personal data.
-        - Do not add order execution, broker connectivity, or automatic trading.
+            1. Audit the existing repository, project structure, dependencies,
+               tests, configuration, and documentation before editing.
+               Identify existing functionality and defects so that useful work
+               is not duplicated or destroyed.
 
-        EXECUTION PLAN
-        Stage 1: Audit the repository, current branch, requirements, tests, and
-        existing defects. Record a concise baseline.
-        Stage 2: Implement and validate data models, OHLCV ingestion, and the
-        complete 21-combination symbol/timeframe matrix.
-        Stage 3: Implement the four strategy families and a stable, explicit
-        signal contract, including entry, invalidation, stop-loss, take-profit,
-        risk/reward, timestamps, provenance, and status.
-        Stage 4: Implement no-lookahead backtesting, transaction costs, risk
-        controls, and regression tests.
-        Stage 5: Implement walk-forward and holdout qualification, empirical
-        randomized-baseline testing, concentration metrics, and honest
-        evidence reporting.
-        Stage 6: Implement or complete market-data adapters and offline-safe
-        behavior.
-        Stage 7: Run the full available test suite, static checks, and offline
-        end-to-end workflow. If safe and practical, attempt real-data evaluation
-        for each supported instrument. Never invent missing results.
-        Stage 8: Review the diff for security, correctness, scope violations,
-        duplicated logic, and misleading claims. Update documentation and
-        produce a concise evidence-based final report.
+            2. Use Python 3.11 or newer. Preserve a maintainable package
+               architecture and separate responsibilities clearly.
 
-        BOUNDED REPAIR POLICY
-        - For each failing validation stage, perform at most three targeted
-          repair attempts.
-        - After three unsuccessful attempts, stop modifying that failing area,
-          preserve the evidence, and continue with independent safe work.
-        - Do not conceal failures, weaken tests merely to obtain green status,
-          delete meaningful assertions, or introduce fake fixtures as real data.
-        - Do not create repeated PRs or launch another autonomous mission.
+            3. Implement deterministic, testable strategy interfaces for:
+               - SMA/EMA crossover
+               - Trend pullback
+               - Breakout
+               - Bollinger Bands mean reversion
 
-        COMPLETION LEVELS
-        Report the highest level actually supported by evidence:
-        - LEVEL 1 — IMPLEMENTED: implementation and relevant offline tests exist.
-        - LEVEL 2 — EVALUATED_WITH_REAL_DATA: genuine identified market data
-          was evaluated with reproducible results and traceable provenance.
-        - LEVEL 3 — LIVE_SIGNAL_VERIFIED: a signal was verified against a
-          genuinely live data path with timestamp and provenance evidence.
-        Do not claim a higher level based on mocks, synthetic fixtures, stale
-        data, or implementation alone.
+            4. Implement strict OHLCV validation, including required columns,
+               numeric and finite values, positive prices, valid OHLC relationships,
+               volume validation, UTC timestamp normalization, duplicate timestamps,
+               chronological ordering, missing candles, and explicit data-quality
+               reporting. Reject invalid data rather than silently repairing it
+               without a documented rule.
 
-        FINAL STATUS
-        Select exactly one overall status and justify it:
-        - COMPLETE
-        - COMPLETE_OFFLINE
-        - PARTIAL
-        - BLOCKED
+            5. Prevent look-ahead bias and future-data leakage throughout indicators,
+               signal generation, feature calculation, strategy selection,
+               backtesting, and qualification. A decision may use only information
+               available at its decision timestamp.
 
-        GIT AND PULL REQUEST POLICY
-        - Create one focused implementation branch and one pull request.
-        - Do not push directly to main.
-        - Include the implementation summary, tests actually run, exact failures,
-          data-source evidence, limitations, and completion level in the PR.
-        - The user authorizes attempting to merge this single PR even if some
-          tests fail, provided every failure is disclosed and no security issue,
-          secret exposure, unsafe execution path, or other serious integrity
-          defect is introduced.
-        - Attempt the merge only if GitHub permissions and repository branch
-          protections permit it. Never bypass branch protection, force a merge,
-          or misrepresent a merge as successful.
-        - If merge is blocked, report the exact GitHub blocker and leave the
-          PR available for review.
-        - Never claim tests, real-data evaluations, PR creation, or merge
-          succeeded unless the corresponding result was actually observed.
+            6. Implement ATR-based risk geometry, stop-loss and take-profit levels,
+               risk/reward calculations, and validated position-sizing calculations.
+               Reject invalid or undefined risk inputs. Do not imply that a signal
+               guarantees profitability.
 
-        Begin now. Complete all safe, bounded work in this run and leave a
-        precise final report in the pull request and issue comment.
+            7. Implement a reproducible backtesting engine with chronological
+               evaluation, configurable transaction fees, slippage assumptions,
+               equity tracking, drawdown, net P&L, and clearly defined performance
+               metrics.
+
+            8. Separate training, validation, and test periods chronologically.
+               Implement walk-forward evaluation and a genuinely untouched holdout.
+               Prevent information leakage between periods and document the
+               evaluation methodology.
+
+            9. Define a conservative, explicit rule for bars in which both stop-loss
+               and take-profit levels are touched. Do not assume the favorable
+               outcome when intrabar ordering cannot be established from the data.
+
+            10. Implement qualification gates that reject insufficient sample sizes,
+                missing evidence, invalid data, contaminated holdouts, and
+                unsupported statistical conclusions.
+
+            11. Implement a real cryptocurrency OHLCV adapter when a reliable
+                public source can be used without credentials. Implement CSV-first
+                XAUUSD ingestion and document optional alternative providers.
+                Respect provider limitations and report network failures honestly.
+
+            12. Keep data adapters, validation, indicators, strategies, risk
+                calculations, backtesting, statistical qualification, and signal
+                contracts separated into testable components.
+
+            13. Provide suitable configuration and CLI/API entry points consistent
+                with the repository's existing architecture. Validate all external
+                inputs and provide useful error messages.
+
+            14. Add unit, integration, regression, and offline end-to-end tests.
+                The core test suite must not require credentials or mandatory
+                external network access.
+
+            15. Update practical documentation covering installation, configuration,
+                supported instruments and timeframes, CSV format, data providers,
+                strategy behavior, backtesting, metrics, limitations, testing,
+                and usage examples.
+
+            SIGNAL CONTRACT
+            Define an explicit, versioned signal contract appropriate to the
+            existing project. Where applicable, include:
+            - Instrument and timeframe
+            - Signal direction or NO_TRADE
+            - Decision timestamp in UTC
+            - Entry price or entry conditions
+            - Stop-loss and take-profit
+            - Risk/reward calculation
+            - Strategy and configuration identity
+            - Data source and data provenance
+            - Data freshness and evaluation status
+            - Qualification status and reasons
+            - Explicit invalidation conditions
+
+            Reject or explicitly mark signals when required fields are missing,
+            prices are invalid, data is stale, evidence is insufficient, or
+            qualification has failed. Never turn an unavailable result into a
+            BUY or SELL by default.
+
+            STATISTICAL REQUIREMENTS
+
+            1. Use the empirical one-sided randomized-baseline p-value:
+
+               p = (1 + count(random_stat >= observed_stat)) / (M + 1)
+
+               Here M is the number of valid randomized trials. Document the
+               randomized null model, statistic, trial count, and random seed.
+
+            2. A z-score may be reported as descriptive information but must not
+               replace the empirical p-value.
+
+            3. Make randomized evaluations reproducible with explicit seeds and
+               documented assumptions.
+
+            4. Report sample counts, period coverage, transaction costs, slippage,
+               net P&L, drawdown, and all other implemented metrics with clear
+               definitions.
+
+            5. Calculate concentration metrics from traceable net monetary P&L or
+               explicitly defined equity-based returns. Handle zero, negative,
+               and undefined denominators explicitly. Never conceal these cases
+               by silently changing the denominator or normalizing away losses.
+
+            6. Avoid unsupported claims of profitability or statistical significance.
+               Document limitations, trial selection, and multiple-comparison risks
+               where applicable.
+
+            DATA AND EVIDENCE INTEGRITY
+
+            Never fabricate market data, provider responses, credentials, backtest
+            results, statistical evidence, or live-verification results.
+
+            Clearly distinguish synthetic test fixtures from genuine market data.
+
+            For real-data evaluations, record the available source identity,
+            retrieval time, timestamp units, instrument, timeframe, date range,
+            relevant configuration, and evaluation results.
+
+            If real data is unavailable, continue safe offline implementation and
+            testing. Clearly identify which evaluations were not possible and why.
+
+            Never represent historical or synthetic data as live data. Never
+            represent an implemented adapter as proof that a live signal was
+            verified.
+
+            Do not commit secrets, access tokens, private keys, or personal data.
+            Do not add broker connectivity, order execution, or automatic trading.
+
+            EXECUTION PLAN
+
+            Stage 1 — Baseline audit
+            Inspect the repository and record its initial state, existing
+            functionality, important defects, test coverage, and constraints.
+
+            Stage 2 — Data layer
+            Implement or repair OHLCV schemas, validation, timestamp handling,
+            provenance, provider interfaces, and the complete 21-combination
+            instrument/timeframe matrix.
+
+            Stage 3 — Strategy and signal layer
+            Implement or repair all four strategy families, deterministic
+            calculations, the explicit signal contract, and ATR-based risk
+            geometry. Add tests for edge cases and invalid inputs.
+
+            Stage 4 — Backtesting
+            Implement or repair no-lookahead evaluation, transaction costs,
+            slippage, equity tracking, drawdown, conservative execution assumptions,
+            chronological data separation, and regression tests.
+
+            Stage 5 — Qualification
+            Implement or repair walk-forward evaluation, untouched holdout
+            validation, randomized-baseline testing, empirical p-values,
+            concentration metrics, and evidence-based qualification gates.
+
+            Stage 6 — Data adapters
+            Implement or repair the real-data adapters that are feasible within
+            the available environment. Keep offline operation possible and report
+            unavailable data sources explicitly.
+
+            Stage 7 — Verification
+            Run the complete available test suite, relevant static checks, and
+            offline end-to-end workflow. Attempt genuine real-data evaluation
+            where safe, practical, and available. Do not invent missing evidence.
+
+            Stage 8 — Final review
+            Inspect the complete diff for correctness, security, data integrity,
+            scope violations, misleading claims, unnecessary duplication, and
+            accidental removal of meaningful tests. Update documentation.
+            Record exact test commands, observed results, failures, limitations,
+            and the highest evidence-supported completion level.
+
+            BOUNDED REPAIR POLICY
+
+            For each failing validation stage, perform at most three targeted
+            repair attempts. Preserve failure evidence. After three unsuccessful
+            attempts, stop modifying that failing area and continue with other
+            independent work that can be completed safely.
+
+            Do not weaken meaningful tests merely to obtain a passing result.
+            Do not delete assertions to hide defects.
+            Do not replace real-data requirements with synthetic fixtures.
+            Do not claim success when a command or check was not run.
+            Do not create repeated pull requests or launch follow-up missions.
+
+            COMPLETION LEVELS
+
+            Report the highest level genuinely supported by evidence:
+
+            LEVEL 1 — IMPLEMENTED
+            The implementation and relevant offline tests exist. This level alone
+            does not prove performance on genuine market data.
+
+            LEVEL 2 — EVALUATED_WITH_REAL_DATA
+            Genuine, identified market data was evaluated with reproducible results
+            and traceable provenance.
+
+            LEVEL 3 — LIVE_SIGNAL_VERIFIED
+            A signal was verified through a genuinely live data path with evidence
+            of data freshness, timestamps, provenance, and the actual result.
+
+            Never claim a higher level based on mocks, synthetic fixtures, stale
+            historical data, code existence, or successful compilation alone.
+            Report coverage separately when different instruments or timeframes
+            have different evidence levels.
+
+            FINAL STATUS
+
+            Select exactly one overall status and justify it:
+            - COMPLETE
+            - COMPLETE_OFFLINE
+            - PARTIAL
+            - BLOCKED
+
+            Use COMPLETE only when the required implementation and acceptance
+            criteria are satisfied with appropriate evidence. Use COMPLETE_OFFLINE
+            when offline implementation and verification are complete but genuine
+            external-data evaluation is unavailable. Use PARTIAL when meaningful
+            requirements remain incomplete. Use BLOCKED when a material blocker
+            prevents useful progress.
+
+            GIT AND PULL REQUEST POLICY
+
+            Create one focused implementation branch and one pull request.
+            Never push implementation changes directly to main.
+
+            Include in the pull request:
+            - Summary of implemented changes
+            - Requirements completed and remaining
+            - Exact tests and commands actually run
+            - Actual pass/fail counts and failure details
+            - Genuine data-source and evaluation evidence
+            - Instrument/timeframe coverage
+            - Known limitations and blockers
+            - Completion level and overall status
+
+            The user authorizes attempting to merge this single pull request even
+            if some tests fail, provided all failures are disclosed and no security
+            issue, secret exposure, unsafe execution path, or other serious
+            integrity defect is introduced.
+
+            Attempt the merge only if GitHub permissions and repository protections
+            allow it. Never bypass branch protection, evade required checks, force
+            a merge, or misrepresent a failed merge as successful.
+
+            If merge is blocked, leave the pull request available and report the
+            exact observed blocker. Do not create another pull request to evade it.
+
+            FINAL REPORTING
+
+            Report actual observed outcomes only. Never claim that tests passed,
+            real data was evaluated, a pull request was created, or a merge
+            succeeded unless the corresponding result was observed.
+
+            Finish with a concise, evidence-based report in the pull request and
+            the triggering issue comment, including the overall status, completion
+            level, tests, data evidence, remaining defects, and any merge blocker.
+
+            Begin now. Execute the full safe mission within this run and do not
+            request intermediate approvals.
