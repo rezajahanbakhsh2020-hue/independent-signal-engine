@@ -433,13 +433,32 @@ def cmd_chart_crypto(args) -> int:
     from signal_engine.chart import build_chart_html
     from signal_engine.latest_signal import latest_decision_report
 
-    market = validate_crypto_symbol(args.market)
-    tf = validate_timeframe(args.timeframe)
+    try:
+        market = validate_crypto_symbol(args.market)
+        tf = validate_timeframe(args.timeframe)
+    except ValueError as exc:
+        print(json.dumps({"ok": False, "error": str(exc)}), file=sys.stderr)
+        return 2
+    if args.max_candles < 1:
+        print(json.dumps({"ok": False, "error": "--max-candles must be >= 1"}), file=sys.stderr)
+        return 2
     now = pd.Timestamp.now(tz="UTC")
-    end = pd.Timestamp(args.end, tz="UTC") if args.end else now
-    start = pd.Timestamp(args.start, tz="UTC") if args.start else end - pd.Timedelta(days=30)
+
+    def utc_timestamp(value: str) -> pd.Timestamp:
+        stamp = pd.Timestamp(value)
+        if stamp.tzinfo is None:
+            return stamp.tz_localize("UTC")
+        return stamp.tz_convert("UTC")
+
+    try:
+        end = utc_timestamp(args.end) if args.end else now
+        start = utc_timestamp(args.start) if args.start else end - pd.Timedelta(days=30)
+    except (TypeError, ValueError) as exc:
+        print(json.dumps({"ok": False, "error": f"invalid --start/--end timestamp: {exc}"}), file=sys.stderr)
+        return 2
     if start >= end:
-        raise SystemExit("--start must be earlier than --end")
+        print(json.dumps({"ok": False, "error": "--start must be earlier than --end"}), file=sys.stderr)
+        return 2
     try:
         df = fetch_range(market, tf, start, end)
     except (BinanceUnavailableError, DataValidationError) as exc:
