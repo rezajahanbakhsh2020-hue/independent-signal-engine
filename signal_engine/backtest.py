@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 from signal_engine.indicators import atr as atr_fn
-from signal_engine.risk import RiskConfig, build_signal
+from signal_engine.risk import RiskConfig, RiskError, Signal, build_signal
 from signal_engine.strategies import Strategy
 
 
@@ -236,7 +236,36 @@ def backtest(
                 if sig is None:
                     rejected_incoherent += 1
                 else:
-                    entry_fill = costs.enter_fill(sig_side, float(opens[t]))
+                    # Optional strategy-owned structural stop. The strategy receives
+                    # only the signal index and historical OHLC frame; invalid geometry
+                    # is rejected without an ATR/fallback stop.
+                    stop_builder = getattr(strategy, "stop_for_signal", None)
+                    if callable(stop_builder):
+                        try:
+                            structural_stop = float(stop_builder(df, t - 1, sig_side))
+                            entry_ref = float(opens[t])
+                            stop_dist = abs(entry_ref - structural_stop)
+                            if (not np.isfinite(structural_stop) or not np.isfinite(entry_ref)
+                                    or entry_ref <= 0 or stop_dist <= 0
+                                    or (sig_side == 1 and structural_stop >= entry_ref)
+                                    or (sig_side == -1 and structural_stop <= entry_ref)):
+                                raise RiskError("invalid structural stop geometry")
+                            target = entry_ref + sig_side * stop_dist * risk.reward_risk_multiple
+                            qty = risk.risk_fraction * equity / stop_dist
+                            qty = min(qty, risk.max_position_fraction * equity / entry_ref)
+                            sig = Signal(
+                                market=market, timeframe=timeframe, strategy=strategy.name,
+                                side=sig_side, signal_ts=index[t - 1], decision_ts=index[t],
+                                entry=entry_ref, stop=structural_stop, target=target,
+                                position_size=qty,
+                                invalidated_by=("close_across_stop" if risk.close_stop else "touch_of_stop"),
+                            )
+                            sig.validate()
+                        except (ValueError, TypeError, IndexError, RiskError, OverflowError):
+                            rejected_incoherent += 1
+                            sig = None
+                    if sig is not None:
+                        entry_fill = costs.enter_fill(sig_side, float(opens[t]))
                     entry_fee = costs.fee_on(entry_fill * sig.position_size)
                     equity -= entry_fee
                     t_open = Trade(
