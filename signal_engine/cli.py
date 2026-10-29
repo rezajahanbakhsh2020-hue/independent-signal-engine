@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from datetime import timedelta
@@ -111,6 +112,8 @@ _TIMEFRAME_DURATION = {
 
 def _freshness_report(df: pd.DataFrame, timeframe: str, max_age_hours: float | None) -> dict:
     """Check that the newest candle is closed and recent; never call stale data current."""
+    if max_age_hours is not None and (not math.isfinite(max_age_hours) or max_age_hours < 0):
+        raise SystemExit("--max-age-hours must be finite and >= 0")
     now = pd.Timestamp.now(tz="UTC")
     duration = _TIMEFRAME_DURATION[timeframe]
     latest_open = pd.Timestamp(df.index[-1]).tz_convert("UTC")
