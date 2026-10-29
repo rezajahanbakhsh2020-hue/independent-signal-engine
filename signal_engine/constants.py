@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+import re
+
 MARKETS = ("XAUUSD", "BTCUSDT", "ETHUSDT")
 
 TIMEFRAMES = ("1m", "5m", "15m", "30m", "1H", "4H", "1D")
@@ -80,3 +82,27 @@ def validate_timeframe(timeframe: str) -> str:
 def market_timeframe_matrix() -> list[tuple[str, str]]:
     """All 21 canonical (market, timeframe) combinations, in fixed order."""
     return [(m, tf) for m in MARKETS for tf in TIMEFRAMES]
+
+
+
+def validate_crypto_symbol(symbol: str) -> str:
+    """Accept any syntactically valid USDT-quoted Binance spot symbol.
+
+    Binance remains the authority on whether the symbol actually exists and
+    is tradable; unknown symbols fail at the provider request, never via
+    substitution to BTCUSDT/ETHUSDT.
+    """
+    value = str(symbol).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,20}USDT", value) or value == "XAUUSD":
+        raise UnsupportedMarketError(
+            f"Invalid USDT crypto symbol {symbol!r}; expected a Binance-style pair such as SOLUSDT or ADAUSDT"
+        )
+    return value
+
+
+def validate_market_or_crypto_symbol(market: str) -> str:
+    """Preserve canonical markets while allowing any USDT crypto symbol."""
+    value = str(market).strip().upper()
+    if value in MARKETS:
+        return value
+    return validate_crypto_symbol(value)
