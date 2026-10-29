@@ -20,7 +20,7 @@ TIMEFRAME = "1H"
 LOOKBACK_DAYS = 365
 INITIAL_EQUITY = 10_000.0
 CONFIRMATIONS = ("rsi", "macd", "ema_trend", "adx_direction", "volume_expansion")
-COMBINATIONS = tuple(itertools.combinations(CONFIRMATIONS, 2))
+COMBINATIONS = tuple(combo for size in (1, 2, 3) for combo in itertools.combinations(CONFIRMATIONS, size))
 
 
 def midpoint(df: pd.DataFrame, window: int) -> pd.Series:
@@ -232,7 +232,7 @@ def main() -> int:
         "data_provenance": provenance, "results": rows,
         "best_by_selection_window": {"confirmations": selected["confirmations"], "strategy": selected["strategy"], "first_245_days_selection_window": selected["first_245_days_selection_window"], "final_120_days_out_of_sample": selected["final_120_days_out_of_sample"]},
         "limitations": [
-            "Exploratory grid search; choosing the best of six combinations creates selection bias.",
+            "Exploratory grid search; choosing the best among many combinations creates substantial selection bias.",
             "One year of historical BTC 1H data is not evidence of future profitability.",
             "All results include the same modeled fees, spread, slippage, ATR stop/target and next-open execution.",
             "A candidate is not considered robust from positive total return alone; trade count, drawdown and an untouched out-of-sample period must also be reviewed.",
