@@ -133,6 +133,40 @@ class IchimokuComboStrategy(Strategy):
         return out
 
 
+class WindowedStrategy(Strategy):
+    """Apply a strategy only to a specified trading window, retaining prior indicator context."""
+    def __init__(self, inner: Strategy, start: pd.Timestamp, end: pd.Timestamp) -> None:
+        self.inner = inner
+        self.start = start
+        self.end = end
+        self.name = f"{inner.name}_{start.date()}_{end.date()}"
+
+    def raw_direction(self, df: pd.DataFrame) -> pd.Series:
+        raw = self.inner.raw_direction(df).copy()
+        # A raw signal is executed one candle later; suppress signals outside the
+        # window and the final candle before its exclusive end boundary.
+        mask = (df.index >= self.start) & (df.index < self.end - pd.Timedelta(hours=1))
+        return raw.where(mask, 0)
+
+
+def summarize(df: pd.DataFrame, strategy: Strategy, market: str, risk: RiskConfig,
+              costs: CostConfig, provenance: dict) -> dict:
+    result = backtest(df, strategy, market, TIMEFRAME, risk, costs,
+                      initial_equity=INITIAL_EQUITY, provenance=provenance)
+    m = compute_metrics(result)
+    return {
+        "total_return_pct": m.total_return_pct,
+        "max_drawdown_pct": m.max_drawdown_pct,
+        "net_total_pnl": m.net_total_pnl,
+        "profit_factor": m.profit_factor,
+        "win_rate_pct": None if m.win_rate is None else m.win_rate * 100,
+        "trades": m.n_trades,
+        "total_fees": m.total_fees,
+        "insufficient_samples": m.insufficient_samples,
+        "n_gains": m.n_gains,
+        "n_losses": m.n_losses,
+    }
+
 def main() -> int:
     now = pd.Timestamp.now(tz="UTC").floor("h")
     end = now
@@ -153,29 +187,30 @@ def main() -> int:
     risk = RiskConfig(atr_window=14, atr_multiplier=2.0,
                       reward_risk_multiple=2.0, risk_fraction=0.01)
     costs = CostConfig(fee_bps=2.0, spread_bps=2.0, slippage_bps=1.0)
+    split = end - pd.Timedelta(days=120)
     rows = []
     for combo in COMBINATIONS:
         strategy = IchimokuComboStrategy(combo)
-        result = backtest(df, strategy, MARKET, TIMEFRAME, risk, costs,
-                          initial_equity=INITIAL_EQUITY, provenance=provenance)
-        m = compute_metrics(result)
+        full = summarize(df, strategy, MARKET, risk, costs, provenance)
+        train = summarize(df, WindowedStrategy(strategy, start, split), MARKET, risk, costs, provenance)
+        test = summarize(df, WindowedStrategy(strategy, split, end), MARKET, risk, costs, provenance)
         rows.append({
             "confirmations": list(combo), "strategy": strategy.name,
-            "candles": result.n_candles, "start_utc": result.start_utc,
-            "end_utc": result.end_utc, "total_return_pct": m.total_return_pct,
-            "max_drawdown_pct": m.max_drawdown_pct, "net_total_pnl": m.net_total_pnl,
-            "profit_factor": m.profit_factor, "win_rate_pct": None if m.win_rate is None else m.win_rate * 100,
-            "trades": m.n_trades, "total_fees": m.total_fees,
-            "insufficient_samples": m.insufficient_samples,
-            "n_gains": m.n_gains, "n_losses": m.n_losses,
+            "candles": len(df), "start_utc": provenance["coverage_start_utc"],
+            "end_utc": provenance["coverage_end_utc"],
+            "full_year": full, "first_245_days_selection_window": train,
+            "final_120_days_out_of_sample": test,
         })
-    rows.sort(key=lambda x: (x["total_return_pct"] is not None,
-                             x["total_return_pct"] if x["total_return_pct"] is not None else -1e9),
-              reverse=True)
+    rows.sort(key=lambda x: (
+        x["first_245_days_selection_window"]["total_return_pct"] is not None,
+        x["first_245_days_selection_window"]["total_return_pct"]
+        if x["first_245_days_selection_window"]["total_return_pct"] is not None else -1e9
+    ), reverse=True)
+    selected = rows[0]
     output = {
         "kind": "btc_ichimoku_confirmation_grid_backtest",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "market": MARKET, "timeframe": TIMEFRAME, "window_days_requested": LOOKBACK_DAYS,
+        "market": MARKET, "timeframe": TIMEFRAME, "window_days_requested": LOOKBACK_DAYS,\n        "selection_window_days": 245, "untouched_out_of_sample_days": 120,\n        "selection_rule": "rank combinations on first 245 days only; inspect final 120 days separately",
         "initial_equity": INITIAL_EQUITY, "risk": vars(risk), "costs_bps_per_fill": vars(costs),
         "fixed_base_rules": {
             "ichimoku": "9/26/52; use cloud visibly plotted at current candle without future leakage",
@@ -188,7 +223,7 @@ def main() -> int:
             "ema_trend": "price and EMA20 above EMA50 for long; both below for short",
             "adx_direction": "ADX(14) >= 20 and DI direction agrees with side",
         },
-        "data_provenance": provenance, "results": rows,
+        "data_provenance": provenance, "results": rows,\n        "best_by_selection_window": {"confirmations": selected["confirmations"], "strategy": selected["strategy"], "first_245_days_selection_window": selected["first_245_days_selection_window"], "final_120_days_out_of_sample": selected["final_120_days_out_of_sample"]},
         "limitations": [
             "Exploratory grid search; choosing the best of six combinations creates selection bias.",
             "One year of historical BTC 1H data is not evidence of future profitability.",
