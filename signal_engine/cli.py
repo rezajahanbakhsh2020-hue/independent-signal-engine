@@ -24,6 +24,7 @@ import pandas as pd
 from signal_engine.backtest import backtest, CostConfig
 from signal_engine.constants import MARKETS, TIMEFRAMES, validate_market, validate_timeframe
 from signal_engine.data.csv_source import read_csv_ohlcv
+from signal_engine.data.validate import DataValidationError
 from signal_engine.data.synthetic import synth_ohlcv
 from signal_engine.report import evaluate_cell, matrix_cells, report_to_json
 from signal_engine.risk import RiskConfig
@@ -81,7 +82,14 @@ def _kv_params(pairs: list[str]) -> dict:
 
 # ----------------------------------------------------------------- commands
 def cmd_validate_csv(args) -> int:
-    df, rep = read_csv_ohlcv(args.csv, expected_spacing=args.expected_spacing)
+    try:
+        _df, rep = read_csv_ohlcv(args.csv, expected_spacing=args.expected_spacing)
+    except DataValidationError as exc:
+        out = {"ok": False, "error": str(exc)}
+        if exc.report is not None:
+            out["validation"] = exc.report.as_dict()
+        print(json.dumps(out, indent=2))
+        return 1
     out = {"ok": True, "validation": rep.as_dict()}
     print(json.dumps(out, indent=2))
     return 0
