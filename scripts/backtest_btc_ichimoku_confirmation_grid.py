@@ -16,12 +16,12 @@ from signal_engine.risk import RiskConfig
 from signal_engine.strategies.base import Strategy
 
 MARKET = "BTCUSDT"
-TIMEFRAME = "4H"
-BAR_DURATION = pd.Timedelta(hours=4)
-LOOKBACK_DAYS = 365
+TIMEFRAME = "15m"
+BAR_DURATION = pd.Timedelta(minutes=15)
+LOOKBACK_DAYS = 240
 INITIAL_EQUITY = 10_000.0
 CONFIRMATIONS = ("rsi", "macd", "ema_trend", "adx_direction", "volume_expansion")
-COMBINATIONS = tuple(combo for size in (1, 2, 3) for combo in itertools.combinations(CONFIRMATIONS, size))
+COMBINATIONS = tuple(combo for size in (1, 2) for combo in itertools.combinations(CONFIRMATIONS, size))
 
 
 def midpoint(df: pd.DataFrame, window: int) -> pd.Series:
@@ -177,8 +177,8 @@ def main() -> int:
     start = end - pd.Timedelta(days=LOOKBACK_DAYS)
     df = fetch_range(MARKET, TIMEFRAME, start, end)
     df = df.loc[df.index + BAR_DURATION <= end].copy()
-    if len(df) < 1200:
-        raise RuntimeError(f"Expected roughly one year of closed BTC 4H candles; received only {len(df)}")
+    if len(df) < 15000:
+        raise RuntimeError(f"Expected roughly 240 days of closed BTC 15m candles; received only {len(df)}")
     provenance = {
         "source": df.attrs.get("source", "unknown"),
         "retrieval_time_utc": df.attrs.get("retrieval_time_utc"),
@@ -202,11 +202,11 @@ def main() -> int:
             "confirmations": list(combo), "strategy": strategy.name,
             "candles": len(df), "start_utc": provenance["coverage_start_utc"],
             "end_utc": provenance["coverage_end_utc"],
-            "full_year": full, "first_245_days_selection_window": train,
+            "full_year": full, "first_120_days_selection_window": train,
             "final_120_days_out_of_sample": test,
         })
     rows.sort(key=lambda x: (
-        x["first_245_days_selection_window"]["total_return_pct"] is not None,
+        x["first_120_days_selection_window"]["total_return_pct"] is not None,
         x["first_245_days_selection_window"]["total_return_pct"]
         if x["first_245_days_selection_window"]["total_return_pct"] is not None else -1e9
     ), reverse=True)
@@ -215,8 +215,8 @@ def main() -> int:
         "kind": "btc_ichimoku_confirmation_grid_backtest",
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "market": MARKET, "timeframe": TIMEFRAME, "window_days_requested": LOOKBACK_DAYS,
-        "selection_window_days": 245, "untouched_out_of_sample_days": 120,
-        "selection_rule": "rank combinations on first 245 days only; inspect final 120 days separately",
+        "selection_window_days": 120, "untouched_out_of_sample_days": 120,
+        "selection_rule": "rank combinations on first 120 days only; inspect final 120 days separately",
         "initial_equity": INITIAL_EQUITY, "risk": vars(risk), "costs_bps_per_fill": vars(costs),
         "fixed_base_rules": {
             "ichimoku": "9/26/52; use cloud visibly plotted at current candle without future leakage",
