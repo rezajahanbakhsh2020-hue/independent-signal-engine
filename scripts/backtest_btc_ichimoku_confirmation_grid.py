@@ -16,7 +16,8 @@ from signal_engine.risk import RiskConfig
 from signal_engine.strategies.base import Strategy
 
 MARKET = "BTCUSDT"
-TIMEFRAME = "1H"
+TIMEFRAME = "4H"
+BAR_DURATION = pd.Timedelta(hours=4)
 LOOKBACK_DAYS = 365
 INITIAL_EQUITY = 10_000.0
 CONFIRMATIONS = ("rsi", "macd", "ema_trend", "adx_direction", "volume_expansion")
@@ -148,7 +149,7 @@ class WindowedStrategy(Strategy):
         raw = self.inner.raw_direction(df).copy()
         # A raw signal is executed one candle later; suppress signals outside the
         # window and the final candle before its exclusive end boundary.
-        mask = (df.index >= self.start) & (df.index < self.end - pd.Timedelta(hours=1))
+        mask = (df.index >= self.start) & (df.index < self.end - BAR_DURATION)
         return raw.where(mask, 0)
 
 
@@ -175,9 +176,9 @@ def main() -> int:
     end = now
     start = end - pd.Timedelta(days=LOOKBACK_DAYS)
     df = fetch_range(MARKET, TIMEFRAME, start, end)
-    df = df.loc[df.index + pd.Timedelta(hours=1) <= end].copy()
+    df = df.loc[df.index + BAR_DURATION <= end].copy()
     if len(df) < 5000:
-        raise RuntimeError(f"Expected roughly one year of closed BTC candles; received only {len(df)}")
+        raise RuntimeError(f"Expected roughly one year of closed BTC 4H candles; received only {len(df)}")
     provenance = {
         "source": df.attrs.get("source", "unknown"),
         "retrieval_time_utc": df.attrs.get("retrieval_time_utc"),
