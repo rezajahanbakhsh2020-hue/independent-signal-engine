@@ -23,7 +23,10 @@ import pandas as pd
 from signal_engine.constants import BINANCE_SYMBOLS, TIMEFRAME_TO_BINANCE
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
-BASE_URL = "https://api.binance.com/api/v3/klines"
+BASE_URLS = (
+    "https://api.binance.com/api/v3/klines",
+    "https://data-api.binance.vision/api/v3/klines",
+)
 MAX_LIMIT = 1000  # provider limit per request
 
 
@@ -35,6 +38,40 @@ def _headers() -> dict[str, str]:
     return {"Accept": "application/json", "User-Agent": "signal-engine/1.0 + research"}
 
 
+def _fetch_klines_with_host(
+    symbol: str,
+    interval: str,
+    start_ms: int,
+    end_ms: int,
+    timeout_seconds: int,
+) -> tuple[list[list], str]:
+    """Fetch one page, falling back only across official public Binance hosts."""
+    params = (
+        f"?symbol={symbol}&interval={interval}"
+        f"&startTime={start_ms}&endTime={end_ms}&limit={MAX_LIMIT}"
+    )
+    errors: list[str] = []
+    for base_url in BASE_URLS:
+        host = base_url.split("/")[2]
+        try:
+            req = urllib.request.Request(base_url + params, headers=_headers())
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+                if resp.status != 200:
+                    errors.append(f"{host}: HTTP {resp.status}")
+                    continue
+                payload = json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            errors.append(f"{host}: {exc}")
+            continue
+        if not isinstance(payload, list):
+            errors.append(f"{host}: unexpected payload shape")
+            continue
+        return payload, host
+    raise BinanceUnavailableError(
+        "All official Binance public endpoints failed: " + "; ".join(errors)
+    )
+
+
 def fetch_klines(
     symbol: str,
     interval: str,
@@ -42,7 +79,7 @@ def fetch_klines(
     end_ms: int,
     timeout_seconds: int = 30,
 ) -> list[list]:
-    """Fetch one page of klines.  Raises BinanceUnavailableError on failure."""
+    """Fetch one page of klines. Raises BinanceUnavailableError on failure."""
     if symbol not in BINANCE_SYMBOLS:
         raise DataValidationError(
             f"Symbol {symbol!r} not supported by the Binance adapter; "
@@ -50,21 +87,9 @@ def fetch_klines(
         )
     if interval not in TIMEFRAME_TO_BINANCE.values():
         raise DataValidationError(f"Unsupported interval {interval!r}")
-    params = (
-        f"?symbol={symbol}&interval={interval}"
-        f"&startTime={start_ms}&endTime={end_ms}&limit={MAX_LIMIT}"
+    payload, _host = _fetch_klines_with_host(
+        symbol, interval, start_ms, end_ms, timeout_seconds
     )
-    url = BASE_URL + params
-    try:
-        req = urllib.request.Request(url, headers=_headers())
-        with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
-            if resp.status != 200:
-                raise BinanceUnavailableError(f"HTTP {resp.status} from Binance")
-            payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise BinanceUnavailableError(f"Binance request failed: {exc}") from exc
-    if not isinstance(payload, list):
-        raise BinanceUnavailableError("Unexpected Binance payload shape")
     return payload
 
 
@@ -87,8 +112,15 @@ def fetch_range(
     end_ms = int(end_utc.timestamp() * 1000)
     rows: list[list] = []
     fetched_expected_span = 0
+    hosts_used: set[str] = set()
     for _ in range(max_requests):
-        chunk = fetch_klines(symbol, interval, start_ms, end_ms, timeout_seconds)
+        chunk, host = _fetch_klines_with_host(symbol, interval, start_ms, end_ms, timeout_seconds)
+        hosts_used.add(host)
+        if len(hosts_used) > 1:
+            raise BinanceUnavailableError(
+                "Official Binance hosts changed during pagination; refusing to mix sources: "
+                + ", ".join(sorted(hosts_used))
+            )
         if not chunk:
             break
         rows.extend(chunk)
@@ -125,7 +157,7 @@ def fetch_range(
     df, _rep = validate_ohlcv(raw, strict_gap_policy=True)
 
     retrieval_time = datetime.now(timezone.utc).isoformat()
-    df.attrs["source"] = "public:binance-api-v3"
+    df.attrs["source"] = f"public:binance-api-v3:{next(iter(hosts_used))}"
     df.attrs["symbol_mapping"] = f"{market}->{symbol}"
     df.attrs["timeframe"] = tf
     df.attrs["retrieval_time_utc"] = retrieval_time
