@@ -144,3 +144,58 @@ jobs:
             changed files, commands and results, evaluated combinations,
             evidence level, blockers, and status:
             COMPLETE, COMPLETE_OFFLINE, PARTIAL, or BLOCKED.
+
+      - name: Publish OpenCode commit to the resume branch
+        if: success()
+        shell: bash
+        env:
+          RESUME_BRANCH: opencode/issue1-20261029091040
+        run: |
+          set -euo pipefail
+          git status --short
+          git diff --check
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            if git status --porcelain | grep -Ei '(^|/)(\.env|[^/]*secret[^/]*|[^/]*token[^/]*|[^/]*credential[^/]*)|\.pem|\.key'; then
+              echo "::error::Potential secret/local credential detected; refusing to publish."
+              exit 1
+            fi
+            git add -A
+            git diff --cached --check
+            if ! git diff --cached --quiet; then
+              git commit -m "Implement independent signal engine updates"
+            fi
+          fi
+
+          LOCAL_SHA="$(git rev-parse HEAD)"
+          git fetch --no-tags origin "refs/heads/${RESUME_BRANCH}:refs/remotes/origin/${RESUME_BRANCH}"
+          REMOTE_SHA="$(git rev-parse "refs/remotes/origin/${RESUME_BRANCH}")"
+
+          if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
+            echo "No new commit to publish."
+            exit 0
+          fi
+
+          git merge-base --is-ancestor "$REMOTE_SHA" "$LOCAL_SHA" || {
+            echo "::error::Local work is not a fast-forward of the resume branch; refusing to overwrite remote history."
+            exit 1
+          }
+          git push origin "$LOCAL_SHA:refs/heads/${RESUME_BRANCH}"
+          echo "Published commit $LOCAL_SHA to $RESUME_BRANCH"
+
+      - name: Create pull request
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESUME_BRANCH: opencode/issue1-20261029091040
+        run: |
+          set -euo pipefail
+          if gh pr view "$RESUME_BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "A pull request already exists for $RESUME_BRANCH."
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$RESUME_BRANCH" \
+              --title "Complete independent multi-market signal engine" \
+              --body "Automated implementation from Issue #1. Review the diff and CI results before merging. No automatic merge is performed."
+          fi
+
