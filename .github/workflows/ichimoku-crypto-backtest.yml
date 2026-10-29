@@ -9,6 +9,7 @@ on:
       - "signal_engine/strategies/ichimoku_rsi_confirmed.py"
       - "signal_engine/strategies/__init__.py"
       - "scripts/backtest_ichimoku_crypto.py"
+      - "scripts/backtest_btc_ichimoku_confirmations.py"
       - ".github/workflows/ichimoku-crypto-backtest.yml"
 
 permissions:
@@ -27,9 +28,13 @@ jobs:
         run: python -m pip install -e .
       - name: Run four real-data Ichimoku backtests
         run: python scripts/backtest_ichimoku_crypto.py
+      - name: Run BTC-only confirmation comparison (same 60-day window)
+        run: python scripts/backtest_btc_ichimoku_confirmations.py
       - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: ichimoku-crypto-backtest
-          path: artifacts/ichimoku_crypto_backtest.*
+          path: |
+            artifacts/ichimoku_crypto_backtest.*
+            artifacts/btc_ichimoku_confirmation_comparison.*
           retention-days: 14
