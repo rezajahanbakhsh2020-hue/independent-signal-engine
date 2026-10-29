@@ -156,8 +156,7 @@ jobs:
           git diff --check
 
           if [[ -n "$(git status --porcelain)" ]]; then
-            if git status --porcelain | grep -Ei '(^|/)(\.env|.*secret.*|.*token.*|.*credential.*)|\.(pem|key)
-; then
+            if git status --porcelain | grep -Ei '(^|/)(\.env|[^/]*secret[^/]*|[^/]*token[^/]*|[^/]*credential[^/]*)|\.pem|\.key'; then
               echo "::error::Potential secret/local credential detected; refusing to publish."
               exit 1
             fi
