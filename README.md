@@ -3,7 +3,7 @@
 A standalone, deterministic Python 3.11+ research and evaluation engine for
 multi-market trading-signal research on:
 
-- **Markets**: `XAUUSD`, `BTCUSDT`, `ETHUSDT` (exact identifiers)
+- **Markets**: XAUUSD plus any valid USDT-quoted Binance spot pair (for example `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `ADAUSDT`). The fixed research matrix remains the 21 canonical XAU/BTC/ETH combinations; the fetch/signal/chart commands accept additional crypto symbols.
 - **Timeframes**: `1m`, `5m`, `15m`, `30m`, `1H`, `4H`, `1D` (the only accepted spellings)
 - **Matrix**: exactly 21 market/timeframe combinations. Unavailable
   combinations are reported explicitly, never silently omitted.
@@ -170,11 +170,11 @@ or `insufficient_candles:N`). If the CSV fails validation the command emits
 `SYNTHETIC test/demo-only fixture; not market data`. The output is a research
 verification aid only; no profitability is implied.
 
-## 10. Fetch public crypto data (BTCUSDT / ETHUSDT only)
+## 10. Fetch public crypto data (any valid USDT spot pair)
 
 ```bash
-signal-engine fetch-crypto --market BTCUSDT --timeframe 1H \
-  --start 2024-01-01T00:00 --end 2024-03-01T00:00 --out BTCUSDT_1H.csv
+signal-engine fetch-crypto --market SOLUSDT --timeframe 1H \
+  --start 2024-01-01T00:00 --end 2024-03-01T00:00 --out SOLUSDT_1H.csv
 ```
 
 Uses official public Binance v3 klines through stdlib `urllib`, trying
@@ -187,6 +187,24 @@ paging aborts the request rather than mixing sources. If both official hosts
 fail, a `BinanceUnavailableError` is raised — **no fake fallback data is ever
 substituted**.
 
+
+
+### One-command crypto chart + latest signal
+
+```bash
+signal-engine chart-crypto --market SOLUSDT --timeframe 15m \
+  --strategy crossover --param fast=10 --param slow=30 \
+  --out charts/SOLUSDT_15m.html
+```
+
+This fetches the selected symbol from Binance, excludes unfinished candles,
+calculates the latest BUY/SELL/NO TRADE decision, and writes a standalone HTML
+candlestick chart with historical strategy markers and decision/data details.
+Change `--market` to any valid Binance USDT spot pair (for example `ADAUSDT`,
+`XRPUSDT`, `BNBUSDT`, or `DOGEUSDT`) and choose any supported timeframe or
+registered strategy. Unknown/delisted symbols fail clearly; they are never
+silently replaced with BTC or ETH. Open the resulting HTML file in a browser.
+This is a research chart, not an order execution interface.
 
 For gold (XAUUSD), use the public BiQuote OHLC endpoint (no API key):
 
