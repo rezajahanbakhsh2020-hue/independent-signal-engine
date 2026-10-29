@@ -57,3 +57,60 @@ def test_chart_html_contains_market_timeframe_and_decision():
     assert "BUY" in page
     assert "<svg" in page
     assert "not orders" in page
+
+
+
+def test_chart_crypto_cli_fetches_selected_symbol_and_writes_html(monkeypatch, tmp_path, capsys):
+    from argparse import Namespace
+    from signal_engine import cli
+    from signal_engine.data import binance_source
+
+    idx = pd.date_range(pd.Timestamp.now(tz="UTC").floor("h") - pd.Timedelta(hours=80),
+                        periods=80, freq="h", tz="UTC")
+    close = np.linspace(100, 120, len(idx))
+    candles = pd.DataFrame({
+        "open": close, "high": close + 1, "low": close - 1,
+        "close": close, "volume": np.full(len(close), 100.0),
+    }, index=idx)
+    candles.attrs["source"] = "test:mock-binance"
+    calls = []
+
+    def fake_fetch_range(symbol, timeframe, start, end):
+        calls.append((symbol, timeframe, start, end))
+        return candles.copy()
+
+    monkeypatch.setattr(binance_source, "fetch_range", fake_fetch_range)
+    out = tmp_path / "charts" / "SOLUSDT_1H.html"
+    args = Namespace(
+        market="SOLUSDT", timeframe="1H", end=None, start=None,
+        max_age_hours=None, max_candles=300, out=str(out),
+        strategy="crossover", param=["fast=3", "slow=8"],
+        atr_window=14, atr_multiplier=2.0, reward_risk=2.0,
+        risk_fraction=0.01, fee_bps=2.0, spread_bps=2.0,
+        slippage_bps=1.0, initial_equity=10000.0,
+    )
+
+    assert cli.cmd_chart_crypto(args) == 0
+    payload = __import__("json").loads(capsys.readouterr().out)
+    assert calls and calls[0][0:2] == ("SOLUSDT", "1H")
+    assert payload["ok"] is True
+    assert payload["market"] == "SOLUSDT"
+    assert out.is_file()
+    html_page = out.read_text(encoding="utf-8")
+    assert "SOLUSDT" in html_page
+    assert "Latest decision" in html_page
+
+
+def test_chart_crypto_cli_rejects_invalid_symbol_without_fetch(monkeypatch, capsys):
+    from argparse import Namespace
+    from signal_engine import cli
+
+    def unexpected_fetch(*args, **kwargs):
+        raise AssertionError("invalid symbol must not fetch or substitute a market")
+
+    from signal_engine.data import binance_source
+    monkeypatch.setattr(binance_source, "fetch_range", unexpected_fetch)
+    args = Namespace(market="SOLBTC", timeframe="1H", max_candles=300)
+
+    assert cli.cmd_chart_crypto(args) == 2
+    assert '"ok": false' in capsys.readouterr().err.lower()
