@@ -426,6 +426,59 @@ def cmd_fetch_crypto(args) -> int:
     return 0
 
 
+def cmd_chart_crypto(args) -> int:
+    """Fetch a chosen USDT crypto pair, compute its latest decision, and export a chart."""
+    from signal_engine.constants import validate_crypto_symbol
+    from signal_engine.data.binance_source import BinanceUnavailableError, fetch_range
+    from signal_engine.chart import build_chart_html
+    from signal_engine.latest_signal import latest_decision_report
+
+    market = validate_crypto_symbol(args.market)
+    tf = validate_timeframe(args.timeframe)
+    now = pd.Timestamp.now(tz="UTC")
+    end = pd.Timestamp(args.end, tz="UTC") if args.end else now
+    start = pd.Timestamp(args.start, tz="UTC") if args.start else end - pd.Timedelta(days=30)
+    if start >= end:
+        raise SystemExit("--start must be earlier than --end")
+    try:
+        df = fetch_range(market, tf, start, end)
+    except (BinanceUnavailableError, DataValidationError) as exc:
+        print(json.dumps({"ok": False, "market": market, "timeframe": tf, "error": str(exc)}), file=sys.stderr)
+        return 1
+    duration = _TIMEFRAME_DURATION[tf]
+    df = df.loc[(df.index + duration) <= now]
+    if df.empty:
+        raise SystemExit("No closed candles were returned for the selected pair/timeframe")
+    params = _kv_params(args.param)
+    strategy = STRATEGY_REGISTRY[args.strategy](**params)
+    risk, _costs = _risk_and_costs(args)
+    freshness = _freshness_report(df, tf, args.max_age_hours)
+    decision = latest_decision_report(
+        df, strategy, risk, market, tf,
+        provenance=str(df.attrs.get("source", "public:binance")),
+        equity=args.initial_equity,
+    )
+    decision["freshness"] = freshness
+    if not freshness["is_fresh"]:
+        decision["decision"] = {"label": "NO TRADE", "reason": freshness["reason"]}
+    page = build_chart_html(
+        df, market=market, timeframe=tf, strategy_name=args.strategy,
+        strategy_params=params, strategy=strategy, latest_decision=decision,
+        max_candles=args.max_candles,
+    )
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(page, encoding="utf-8")
+    print(json.dumps({
+        "ok": True, "market": market, "timeframe": tf, "strategy": args.strategy,
+        "n_closed_candles": len(df), "latest_decision": decision["decision"],
+        "freshness": freshness, "source": df.attrs.get("source"),
+        "chart_html": str(out_path),
+        "note": "Historical markers are research signals, not live orders or a profitability guarantee.",
+    }, indent=2))
+    return 0
+
+
 def cmd_fetch_gold(args) -> int:
     from signal_engine.data.biquote_source import BiQuoteUnavailableError, fetch_range
 
@@ -556,6 +609,17 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--end", required=True)
     f.add_argument("--out", required=True)
     f.set_defaults(func=cmd_fetch_crypto)
+
+    ch = sub.add_parser("chart-crypto", help="Fetch any USDT crypto pair, calculate a signal, and export an HTML chart")
+    _common_opts(ch, strategy=True)
+    ch.add_argument("--market", required=True, help="Any valid Binance USDT pair, e.g. SOLUSDT")
+    ch.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
+    ch.add_argument("--start", default=None, help="UTC start; defaults to 30 days ago")
+    ch.add_argument("--end", default=None, help="UTC end; defaults to now")
+    ch.add_argument("--max-age-hours", type=float, default=None, help="Freshness limit; default is three candle durations")
+    ch.add_argument("--max-candles", type=int, default=300)
+    ch.add_argument("--out", required=True, help="Output standalone HTML chart path")
+    ch.set_defaults(func=cmd_chart_crypto)
 
     g = sub.add_parser("fetch-gold", help="Fetch public XAUUSD OHLC candles from BiQuote")
     g.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
