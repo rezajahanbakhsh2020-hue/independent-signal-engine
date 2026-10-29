@@ -311,8 +311,9 @@ else concentration = Σ (net_pnl[i] / positive_pnl)² for net_pnl[i] > 0
 ## 16. Known limitations and honest-scoping notes
 
 - Data sources: user-supplied OHLCV CSVs for any supported market; the public
-  Binance API/mirror for BTCUSDT and ETHUSDT; and the public BiQuote OHLC API
-  for XAUUSD. Provider coverage differs: BiQuote did not provide 1m XAUUSD bars
+  Binance API/mirror for any valid USDT-quoted spot pair in fetch/signal/chart
+  commands; and the public BiQuote OHLC API for XAUUSD. The fixed statistical
+  research matrix still covers only XAUUSD, BTCUSDT, and ETHUSDT. Provider coverage differs: BiQuote did not provide 1m XAUUSD bars
   in the verified run and returned too few intraday candles for the configured
   walk-forward minimum. The engine reports those cells as unavailable or
   insufficient instead of inventing candles. Additional XAUUSD 1m history may
@@ -348,7 +349,7 @@ signal_engine/
   cli.py                argparse CLI (all commands above)
   data/validate.py      strict OHLCV validation
   data/csv_source.py    CSV loader, resampling (coarser-only)
-  data/binance_source.py public Binance klines adapter (BTC/ETH only)
+  data/binance_source.py public Binance klines adapter (USDT-quoted spot pairs)
   data/biquote_source.py public XAUUSD OHLC adapter (tick-volume semantics)
   latest_signal.py      latest decision and freshness gate
   data/synthetic.py     deterministic synthetic OHLCV (tests/demos, labeled)
