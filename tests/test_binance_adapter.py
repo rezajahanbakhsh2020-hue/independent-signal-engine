@@ -97,6 +97,35 @@ def test_geo_blocked_primary_uses_official_mirror(monkeypatch):
     assert df.attrs["source"] == "public:binance-api-v3:data-api.binance.vision"
 
 
+def test_paging_aborts_if_official_host_changes(monkeypatch):
+    start_ms = 1600000000000
+    page1 = [
+        [start_ms + i * 3600000, "1", "2", "0.5", "1.5", "10",
+         start_ms + (i + 1) * 3600000 - 1, "0", 1, "1", "0", "0"]
+        for i in range(1000)
+    ]
+    page2_start = start_ms + 1000 * 3600000
+    page2 = [
+        [page2_start + i * 3600000, "1", "2", "0.5", "1.5", "10",
+         page2_start + (i + 1) * 3600000 - 1, "0", 1, "1", "0", "0"]
+        for i in range(3)
+    ]
+    primary_calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=None):
+        if req.full_url.startswith("https://api.binance.com/"):
+            primary_calls["n"] += 1
+            if primary_calls["n"] == 1:
+                return make_fake_urlopen(json.dumps(page1).encode())(req, timeout)
+            raise urllib.error.HTTPError(req.full_url, 451, "blocked", {}, None)
+        return make_fake_urlopen(json.dumps(page2).encode())(req, timeout)
+
+    monkeypatch.setattr("signal_engine.data.binance_source.urllib.request.urlopen", fake_urlopen)
+    with pytest.raises(BinanceUnavailableError, match="refusing to mix sources"):
+        fetch_range("BTCUSDT", "1H", pd.Timestamp("2020-09-13T12:00", tz="UTC"),
+                    pd.Timestamp("2020-09-13T12:00", tz="UTC") + pd.Timedelta(hours=1005))
+
+
 def test_network_failure_raises_not_fabricated(monkeypatch):
     def fail(*a, **k):
         raise urllib.error.URLError("connection refused")
