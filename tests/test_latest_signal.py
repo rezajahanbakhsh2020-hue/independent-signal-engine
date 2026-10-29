@@ -248,3 +248,35 @@ def test_cli_signal_rejects_bad_csv_fail_closed(tmp_path, capsys):
 def test_cli_signal_missing_source_fails(tmp_path, capsys):
     with pytest.raises(SystemExit):
         cli_main(["signal", "--market", "BTCUSDT", "--timeframe", "1H", "--strategy", "crossover"])
+
+
+def test_chart_crypto_exports_chart_for_non_btc_symbol(monkeypatch, tmp_path, capsys):
+    from signal_engine.cli import main as cli_main
+
+    now = pd.Timestamp.now(tz="UTC").floor("h")
+    idx = pd.date_range(end=now - pd.Timedelta(hours=1), periods=80, freq="1h")
+    close = np.linspace(100, 140, len(idx))
+    frame = pd.DataFrame({
+        "open": close - 0.2, "high": close + 1.0,
+        "low": close - 1.0, "close": close, "volume": 100.0,
+    }, index=idx)
+    frame.index.name = "timestamp"
+    frame.attrs["source"] = "public:test"
+
+    def fake_fetch(symbol, timeframe, start, end):
+        assert symbol == "SOLUSDT"
+        assert timeframe == "1H"
+        return frame.copy()
+
+    monkeypatch.setattr("signal_engine.data.binance_source.fetch_range", fake_fetch)
+    output = tmp_path / "sol-chart.html"
+    rc = cli_main([
+        "chart-crypto", "--market", "SOLUSDT", "--timeframe", "1H",
+        "--strategy", "crossover", "--param", "fast=2", "--param", "slow=4",
+        "--out", str(output),
+    ])
+    result = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert result["ok"] is True
+    assert result["market"] == "SOLUSDT"
+    assert "<svg" in output.read_text(encoding="utf-8")
