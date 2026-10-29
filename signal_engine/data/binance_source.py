@@ -108,6 +108,19 @@ def fetch_range(
     except ValueError as exc:
         raise DataValidationError(str(exc)) from exc
     tf = validate_timeframe(timeframe)
+
+    def as_utc(value: pd.Timestamp, label: str) -> pd.Timestamp:
+        stamp = pd.Timestamp(value)
+        if pd.isna(stamp):
+            raise DataValidationError(f"{label} must be a valid timestamp")
+        if stamp.tzinfo is None:
+            return stamp.tz_localize("UTC")
+        return stamp.tz_convert("UTC")
+
+    start_utc = as_utc(start_utc, "start_utc")
+    end_utc = as_utc(end_utc, "end_utc")
+    if start_utc >= end_utc:
+        raise DataValidationError("start_utc must be earlier than end_utc")
     symbol = BINANCE_SYMBOLS.get(market, market)
     interval = TIMEFRAME_TO_BINANCE[tf]
     start_ms = int(start_utc.timestamp() * 1000)
@@ -156,6 +169,14 @@ def fetch_range(
             }
         )
     raw = pd.DataFrame(records)
+    if not raw.empty:
+        raw = raw.loc[
+            (raw["timestamp"] >= start_utc) & (raw["timestamp"] < end_utc)
+        ].reset_index(drop=True)
+    if raw.empty:
+        raise BinanceUnavailableError(
+            f"No klines within requested UTC range for {market} {tf}"
+        )
     df, _rep = validate_ohlcv(raw, strict_gap_policy=True)
 
     retrieval_time = datetime.now(timezone.utc).isoformat()
