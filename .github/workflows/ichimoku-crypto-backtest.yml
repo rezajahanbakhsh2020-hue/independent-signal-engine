@@ -1,0 +1,35 @@
+name: Ichimoku RSI Crypto Backtest
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - opencode/issue1-20261029151352
+    paths:
+      - "signal_engine/strategies/ichimoku_rsi_confirmed.py"
+      - "signal_engine/strategies/__init__.py"
+      - "scripts/backtest_ichimoku_crypto.py"
+      - ".github/workflows/ichimoku-crypto-backtest.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install engine
+        run: python -m pip install -e .
+      - name: Run four real-data Ichimoku backtests
+        run: python scripts/backtest_ichimoku_crypto.py
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ichimoku-crypto-backtest
+          path: artifacts/ichimoku_crypto_backtest.*
+          retention-days: 14
