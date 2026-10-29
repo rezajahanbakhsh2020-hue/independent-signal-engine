@@ -146,7 +146,7 @@ jobs:
             COMPLETE, COMPLETE_OFFLINE, PARTIAL, or BLOCKED.
 
       - name: Publish OpenCode commit to the resume branch
-        if: always()
+        if: success()
         shell: bash
         env:
           RESUME_BRANCH: opencode/issue1-20261029091040
