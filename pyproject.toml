@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signal-engine"
+version = "1.0.0"
+description = "Standalone multi-market signal research and evaluation engine (XAUUSD, BTCUSDT, ETHUSDT). Research/simulation only; not financial advice."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pandas>=2.0",
+  "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4",
+]
+
+[project.scripts]
+signal-engine = "signal_engine.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["signal_engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
