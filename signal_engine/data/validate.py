@@ -23,6 +23,10 @@ OPTIONAL_COLUMNS = ("timestamp", "time", "date", "datetime")
 class DataValidationError(ValueError):
     """Raised when a dataset is fundamentally unusable (schema collapse)."""
 
+    def __init__(self, message: str, report: "ValidationReport | None" = None):
+        super().__init__(message)
+        self.report = report
+
 
 @dataclass
 class ValidationReport:
@@ -207,7 +211,7 @@ def validate_ohlcv(
     df = _check_volume(df, rep)
 
     if df.empty:
-        raise DataValidationError("All rows rejected during validation")
+        raise DataValidationError("All rows rejected during validation", report=rep)
 
     # 5. gaps (documented, never filled).
     spacing = dominant_spacing(df.index)
