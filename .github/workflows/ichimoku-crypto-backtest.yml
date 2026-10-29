@@ -31,7 +31,9 @@ jobs:
         run: python scripts/backtest_ichimoku_crypto.py
       - name: Run BTC-only confirmation comparison (same 60-day window)
         run: python scripts/backtest_btc_ichimoku_confirmations.py
-      - name: Run BTC 60-day structural-stop filter grid\n        run: python scripts/backtest_btc_ichimoku_structural_stop.py\n      - name: Upload results
+      - name: Run BTC 60-day structural-stop filter grid
+        run: python scripts/backtest_btc_ichimoku_structural_stop.py
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
           name: ichimoku-crypto-backtest
