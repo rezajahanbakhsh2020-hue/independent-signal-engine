@@ -19,7 +19,7 @@ MARKET = "BTCUSDT"
 TIMEFRAME = "1H"
 LOOKBACK_DAYS = 365
 INITIAL_EQUITY = 10_000.0
-CONFIRMATIONS = ("rsi", "macd", "ema_trend", "adx_direction")
+CONFIRMATIONS = ("rsi", "macd", "ema_trend", "adx_direction", "volume_expansion")
 COMBINATIONS = tuple(itertools.combinations(CONFIRMATIONS, 2))
 
 
@@ -61,6 +61,7 @@ def indicator_frame(df: pd.DataFrame) -> pd.DataFrame:
         "rsi": rsi, "macd": macd, "macd_signal": macd_signal,
         "ema20": ema20, "ema50": ema50, "adx": adx,
         "plus_di": plus_di, "minus_di": minus_di,
+        "volume_ratio": df["volume"] / df["volume"].rolling(20, min_periods=20).mean(),
     }, index=df.index)
 
 
@@ -95,8 +96,10 @@ class IchimokuComboStrategy(Strategy):
                     ok = row["macd"] > row["macd_signal"] if side == 1 else row["macd"] < row["macd_signal"]
                 elif key == "ema_trend":
                     ok = (close.iloc[i] > row["ema50"] and row["ema20"] > row["ema50"]) if side == 1 else (close.iloc[i] < row["ema50"] and row["ema20"] < row["ema50"])
-                else:  # ADX strength plus DI direction
+                elif key == "adx_direction":  # ADX strength plus DI direction
                     ok = (row["adx"] >= 20 and row["plus_di"] > row["minus_di"]) if side == 1 else (row["adx"] >= 20 and row["minus_di"] > row["plus_di"])
+                else:  # volume expansion on the confirmation candle
+                    ok = row["volume_ratio"] >= 1.2
                 if not bool(ok) or pd.isna(ok):
                     return False
             return True
@@ -224,6 +227,7 @@ def main() -> int:
             "macd": "MACD(12,26) above/below signal(9)",
             "ema_trend": "price and EMA20 above EMA50 for long; both below for short",
             "adx_direction": "ADX(14) >= 20 and DI direction agrees with side",
+            "volume_expansion": "confirmation-candle volume >= 1.2x its trailing 20-candle mean",
         },
         "data_provenance": provenance, "results": rows,
         "best_by_selection_window": {"confirmations": selected["confirmations"], "strategy": selected["strategy"], "first_245_days_selection_window": selected["first_245_days_selection_window"], "final_120_days_out_of_sample": selected["final_120_days_out_of_sample"]},
