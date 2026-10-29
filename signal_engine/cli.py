@@ -8,6 +8,7 @@ Subcommands:
 - report          : produce a full JSON report for one market/timeframe
 - matrix          : run the engine across the complete 21-cell matrix
 - fetch-crypto    : fetch BTCUSDT/ETHUSDT klines from the public Binance API
+- fetch-gold      : fetch closed XAUUSD OHLC candles from the public BiQuote API
 
 All costs expressed in basis points. Provenance and honest statuses are
 included in every JSON output.
