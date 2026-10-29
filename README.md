@@ -136,7 +136,37 @@ data file is missing appear with status `"UNAVAILABLE_DATA"` (e.g.
 `missing_data_file:...`), and cells whose pipeline hits an error appear
 with status `"ERROR"` plus the error string. Nothing is dropped or hidden.
 
-## 9. Fetch public crypto data (BTCUSDT / ETHUSDT only)
+## 9. Latest-decision signal check (current-data verification)
+
+```bash
+signal-engine signal --market XAUUSD --timeframe 1H \
+  --csv XAUUSD_1H.csv \
+  --strategy crossover --param fast=20 --param slow=60 \
+  --initial-equity 10000
+```
+
+Computes the most recent decision the engine's uniform execution semantics
+would have acted on from genuinely recent closed candles (fetch them with
+`fetch-crypto`/`fetch-gold` first). Semantics mirror the backtester exactly:
+
+- the decision acted at candle *t* derives from the strategy direction at
+  *t-1* (evidence candle),
+- the latest acted decision therefore uses the **penultimate** candle as the
+  signal candle and the **last** candle's open as the execution reference
+  with validated ATR-based stop/target geometry and position sizing,
+- the strategy direction on the final candle is reported separately as
+  `pending_raw_direction` — it would only be acted upon at a candle that
+  does not exist yet, so it can never carry an entry/stop/target.
+
+Labels: `BUY`, `SELL`, `NO TRADE` (with an explicit reason such as
+`no_active_transition_signal`, `risk_geometry_rejected_zero_or_insufficient_atr`,
+or `insufficient_candles:N`). If the CSV fails validation the command emits
+`ok:false` plus the audit report and exits 1 — fail-closed, never fabricated.
+`--synthetic` uses a deterministic fixture labeled
+`SYNTHETIC test/demo-only fixture; not market data`. The output is a research
+verification aid only; no profitability is implied.
+
+## 10. Fetch public crypto data (BTCUSDT / ETHUSDT only)
 
 ```bash
 signal-engine fetch-crypto --market BTCUSDT --timeframe 1H \
@@ -172,7 +202,7 @@ BTCUSDT are different instruments and are never silently substituted.
 
 ---
  
-## 10. CSV schema
+## 11. CSV schema
 
 | Column | Meaning | Notes |
 |---|---|---|
@@ -190,7 +220,7 @@ kept, count recorded), unsorted data (re-sorted, count recorded).
 reported in `validation.gaps` — they are never filled and no candles are
 invented.
 
-## 11. Signal, decision and execution semantics
+## 12. Signal, decision and execution semantics
 
 For a signal computed from a candle that opened at time `t`:
 
@@ -215,7 +245,7 @@ zero ATR, insufficient warm-up, or incoherent geometry are *counted*
 (`n_signals_rejected_zero_atr`, `n_signals_rejected_incoherent`) rather
 than hidden.
 
-## 12. Risk geometry
+## 13. Risk geometry
 
 `stop_distance = atr(n) × atr_multiplier`, `target = entry ± reward_risk × stop_distance`,
 position size = `(equity × risk_fraction) / stop_distance`, capped so
@@ -227,7 +257,7 @@ Directional coherence is enforced and fail-closed:
 - **SELL**: `target < entry < stop`
 - All four levels must be finite; violation produces no signal at all.
 
-## 13. Concentration metric (documented definition)
+## 14. Concentration metric (documented definition)
 
 Computed via **HHI (Herfindahl–Hirschman Index)** over the dimension
 defaults to **trades**, on **net realized monetary P&L per trade**:
@@ -245,7 +275,7 @@ else concentration = Σ (net_pnl[i] / positive_pnl)² for net_pnl[i] > 0
   same function `hhi_concentration` to that dimension's net P&L values;
   the dimension used is stated wherever concentration is reported.
 
-## 14. Completion statuses
+## 15. Completion statuses
 
 | Status | Meaning |
 |---|---|
@@ -256,7 +286,7 @@ else concentration = Σ (net_pnl[i] / positive_pnl)² for net_pnl[i] > 0
 | `UNAVAILABLE_DATA` | the cell has no data source available (matrix reports include the exact reason) |
 | `ERROR` | the cell's pipeline failed; the exact error is carried in the cell |
 
-## 15. Known limitations and honest-scoping notes
+## 16. Known limitations and honest-scoping notes
 
 - Only user-supplied CSVs (offline path) and the public Binance adapter
   (crypto only) are wired. **XAUUSD historical data must be provided as
@@ -271,14 +301,14 @@ else concentration = Σ (net_pnl[i] / positive_pnl)² for net_pnl[i] > 0
 - Statistical evidence is conditioned on sample size; `p ≈ 0` with `M` very
   small is weak evidence by construction (see section 6 notes).
 
-## 16. Security
+## 17. Security
 
 No secrets, keys, or tokens are read, written, or required. The adapter
 uses public unauthenticated endpoints only. Issue content and any external
 context are treated as untrusted; they cannot override data/boundary
 policies of this engine.
 
-## 17. Layout
+## 18. Layout
 
 ```
 signal_engine/

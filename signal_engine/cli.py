@@ -7,6 +7,7 @@ Subcommands:
 - baseline        : run the randomized-baseline statistical test
 - report          : produce a full JSON report for one market/timeframe
 - matrix          : run the engine across the complete 21-cell matrix
+- signal          : latest BUY/SELL/NO TRADE decision check on real recent candles
 - fetch-crypto    : fetch BTCUSDT/ETHUSDT klines from the public Binance API
 - fetch-gold      : fetch closed XAUUSD OHLC candles from the public BiQuote API
 
@@ -92,6 +93,47 @@ def cmd_validate_csv(args) -> int:
         print(json.dumps(out, indent=2))
         return 1
     out = {"ok": True, "validation": rep.as_dict()}
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def cmd_signal(args) -> int:
+    market = validate_market(args.market)
+    tf = validate_timeframe(args.timeframe)
+    from signal_engine.data.validate import validate_ohlcv
+    from signal_engine.latest_signal import latest_decision_report
+
+    try:
+        if args.csv:
+            df, rep = read_csv_ohlcv(args.csv, expected_spacing=tf)
+            provenance = f"csv:{args.csv}"
+        elif args.synthetic:
+            df = synth_ohlcv(tf, args.synthetic_start, args.synthetic_n, seed=args.synthetic_seed)
+            df, rep = validate_ohlcv(df)
+            provenance = "SYNTHETIC test/demo-only fixture; not market data"
+        else:
+            raise SystemExit("either --csv or --synthetic must be provided")
+    except DataValidationError as exc:
+        out = {"ok": False, "error": str(exc), "status": "NO TRADE (data rejected; fail-closed)"}
+        if exc.report is not None:
+            out["validation"] = exc.report.as_dict()
+        print(json.dumps(out, indent=2))
+        return 1
+    risk, _costs = _risk_and_costs(args)
+    params = _kv_params(args.param)
+    strategy_cls = STRATEGY_REGISTRY[args.strategy]
+    strat = strategy_cls(**params)
+    out = latest_decision_report(
+        df,
+        strat,
+        risk,
+        market,
+        tf,
+        provenance=provenance,
+        equity=args.initial_equity,
+    )
+    out["strategy_params"] = params
+    out["validation"] = rep.as_dict()
     print(json.dumps(out, indent=2))
     return 0
 
@@ -397,6 +439,22 @@ def main(argv: list[str] | None = None) -> int:
     bl.add_argument("--m", type=int, default=999)
     bl.add_argument("--seed", type=int, default=20260101)
     bl.set_defaults(func=cmd_baseline)
+
+    s = sub.add_parser(
+        "signal",
+        help="Latest BUY/SELL/NO TRADE decision check on real recent candles (e.g. fetched with fetch-crypto/fetch-gold)",
+    )
+    _common_opts(s, strategy=True)
+    s.add_argument("--csv", default=None)
+    s.add_argument(
+        "--synthetic", action="store_true", help="Use deterministic synthetic data (labeled test/demo-only)"
+    )
+    s.add_argument("--synthetic-start", default="2024-01-01")
+    s.add_argument("--synthetic-n", type=int, default=2000)
+    s.add_argument("--synthetic-seed", type=int, default=42)
+    s.add_argument("--market", required=True, choices=MARKETS)
+    s.add_argument("--timeframe", required=True, choices=TIMEFRAMES)
+    s.set_defaults(func=cmd_signal)
 
     r = sub.add_parser("report", help="Full report for one market/timeframe")
     _common_opts(r, strategy=True)
