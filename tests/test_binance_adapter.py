@@ -67,12 +67,34 @@ def test_success_path_provenance(monkeypatch):
     )
     df = fetch_range("BTCUSDT", "1H", pd.Timestamp("2020-09-13T12:00", tz="UTC"),
                      pd.Timestamp("2020-09-13T17:00", tz="UTC"))
-    assert df.attrs["source"] == "public:binance-api-v3"
+    assert df.attrs["source"].startswith("public:binance-api-v3:")
     assert df.attrs["symbol_mapping"] == "BTCUSDT->BTCUSDT"
     assert df.attrs["timezone"] == "UTC"
     assert df.index.tz is not None
     assert df.attrs["retrieval_time_utc"].endswith("Z") or "+00:00" in df.attrs["retrieval_time_utc"]
     assert df.attrs["coverage_start_utc"] is not None
+
+
+def test_geo_blocked_primary_uses_official_mirror(monkeypatch):
+    now_ms = 1600000000000
+    klines = [
+        [now_ms + i * 3600000, "100.0", "101.0", "99.0", "100.5", "1000.0",
+         now_ms + i * 3600000 + 3599999, "0", 1, "1", "0", "0"]
+        for i in range(5)
+    ]
+    def fake_urlopen(req, timeout=None):
+        if req.full_url.startswith("https://api.binance.com/"):
+            raise urllib.error.HTTPError(req.full_url, 451, "blocked", {}, None)
+        class Resp:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return json.dumps(klines).encode()
+        return Resp()
+    monkeypatch.setattr("signal_engine.data.binance_source.urllib.request.urlopen", fake_urlopen)
+    df = fetch_range("BTCUSDT", "1H", pd.Timestamp("2020-09-13T12:00", tz="UTC"),
+                     pd.Timestamp("2020-09-13T17:00", tz="UTC"))
+    assert df.attrs["source"] == "public:binance-api-v3:data-api.binance.vision"
 
 
 def test_network_failure_raises_not_fabricated(monkeypatch):
