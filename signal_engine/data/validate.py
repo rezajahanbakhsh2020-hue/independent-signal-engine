@@ -92,9 +92,20 @@ def _check_ohlc_relations(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFra
 
 
 def _check_finite(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFrame:
+    def is_finite_number(value) -> bool:
+        # pandas may yield Python/numpy integers as well as floats. Accept
+        # finite numeric values of either kind; reject missing, booleans and
+        # values that cannot safely be converted to a finite float.
+        if pd.isna(value) or isinstance(value, bool):
+            return False
+        try:
+            return math.isfinite(float(value))
+        except (TypeError, ValueError, OverflowError):
+            return False
+
     bad = pd.Series(False, index=df.index)
     for col in REQUIRED_COLUMNS:
-        bad |= ~df[col].map(lambda x: isinstance(x, float) and math.isfinite(x))
+        bad |= ~df[col].map(is_finite_number)
     # also treat NaN in volume as rejection
     n_bad = int(bad.sum())
     if n_bad:
