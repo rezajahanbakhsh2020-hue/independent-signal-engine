@@ -6,6 +6,8 @@ on:
     branches:
       - opencode/issue1-20261029151352
     paths:
+      - "signal_engine/backtest.py"
+      - "signal_engine/risk.py"
       - "signal_engine/strategies/ichimoku_rsi_confirmed.py"
       - "signal_engine/strategies/__init__.py"
       - "scripts/backtest_ichimoku_crypto.py"
