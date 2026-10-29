@@ -446,6 +446,8 @@ def cmd_chart_crypto(args) -> int:
 
     def utc_timestamp(value: str) -> pd.Timestamp:
         stamp = pd.Timestamp(value)
+        if pd.isna(stamp):
+            raise ValueError(f"timestamp is not a valid date: {value!r}")
         if stamp.tzinfo is None:
             return stamp.tz_localize("UTC")
         return stamp.tz_convert("UTC")
