@@ -90,6 +90,25 @@ jobs:
           echo "Resume commits:"
           git log --oneline -20 "$RESUME_SHA"
 
+      - name: Advance resume branch to latest main without rewriting history
+        shell: bash
+        env:
+          RESUME_BRANCH: opencode/issue1-20261029091040
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git fetch --no-tags origin "$RESUME_BRANCH"
+          git checkout -B "$RESUME_BRANCH" "refs/remotes/origin/$RESUME_BRANCH"
+
+          if git merge-base --is-ancestor HEAD origin/main; then
+            git merge --ff-only origin/main
+          else
+            # Preserve branch-only commits; stop on conflicts instead of rewriting history.
+            git merge --no-edit origin/main
+          fi
+
+          git push origin "$RESUME_BRANCH"
+
       - name: Configure Git identity
         shell: bash
         run: |
