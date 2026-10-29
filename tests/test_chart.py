@@ -82,7 +82,9 @@ def test_chart_crypto_cli_fetches_selected_symbol_and_writes_html(monkeypatch, t
     monkeypatch.setattr(binance_source, "fetch_range", fake_fetch_range)
     out = tmp_path / "charts" / "SOLUSDT_1H.html"
     args = Namespace(
-        market="SOLUSDT", timeframe="1H", end=None, start=None,
+        market="SOLUSDT", timeframe="1H",
+        start=idx[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
+        end=idx[-1].strftime("%Y-%m-%dT%H:%M:%SZ"),
         max_age_hours=None, max_candles=300, out=str(out),
         strategy="crossover", param=["fast=3", "slow=8"],
         atr_window=14, atr_multiplier=2.0, reward_risk=2.0,
@@ -93,6 +95,7 @@ def test_chart_crypto_cli_fetches_selected_symbol_and_writes_html(monkeypatch, t
     assert cli.cmd_chart_crypto(args) == 0
     payload = __import__("json").loads(capsys.readouterr().out)
     assert calls and calls[0][0:2] == ("SOLUSDT", "1H")
+    assert str(calls[0][2].tz) == "UTC" and str(calls[0][3].tz) == "UTC"
     assert payload["ok"] is True
     assert payload["market"] == "SOLUSDT"
     assert out.is_file()
