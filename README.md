@@ -143,12 +143,15 @@ signal-engine fetch-crypto --market BTCUSDT --timeframe 1H \
   --start 2024-01-01T00:00 --end 2024-03-01T00:00 --out BTCUSDT_1H.csv
 ```
 
-Uses the **public** `api.binance.com/api/v3/klines` endpoint through
-stdlib `urllib` (no credentials, respects the 1000-kline paging limit and
-inserts a small sleep between pages). The result carries provenance:
-source, retrieval time (UTC), symbol mapping, timezone, and full
-coverage. On network failure a `BinanceUnavailableError` is raised and
-persisted as a run error — **no fake fallback data is ever substituted**.
+Uses official public Binance v3 klines through stdlib `urllib`, trying
+`api.binance.com` first and the official public mirror
+`data-api.binance.vision` if the primary host is unreachable or blocked
+(no credentials). It respects the 1000-kline paging limit and inserts a
+small sleep between pages. Provenance records the actual host used, retrieval
+time (UTC), symbol mapping, timezone, and full coverage. A host change during
+paging aborts the request rather than mixing sources. If both official hosts
+fail, a `BinanceUnavailableError` is raised — **no fake fallback data is ever
+substituted**.
 
 ---
 
