@@ -258,6 +258,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 @media(max-width:560px){{main{{padding:16px 11px 40px}}.big{{font-size:29px}}#chart-frame{{height:520px}}.actions{{grid-template-columns:1fr}}}}
 </style></head><body><main>
 <h1>داشبورد آنلاین سیگنال</h1><p class="intro">پایش خودکار بازار، تصمیم فعلی و آرشیو کارت‌های BUY / SELL؛ فقط دو استراتژی مجاز و بدون اجرای معامله.</p>
+<div class="panel" style="padding:10px 14px"><a href="/perpetual" style="color:#8fd9c2;font-weight:800;text-decoration:none">ورود به صفحه مستقل Perpetual ←</a><span class="muted" style="margin-right:12px">Spot و داشبورد فعلی بدون تغییر در مسیر خود باقی می‌مانند.</span></div>
 <form id="signal-form" class="panel"><div class="controls">
 <div><label for="market">نماد بازار</label><select id="market" name="market">{markets}</select></div>
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframes}</select></div>
@@ -347,6 +348,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed=urlparse(self.path)
         if parsed.path=="/api/poll": self._api_poll(parse_qs(parsed.query));return
+        if parsed.path=="/perpetual":
+            from signal_engine.perpetual_dashboard import _page as perpetual_page
+            self._send(perpetual_page());return
+        if parsed.path=="/api/perpetual/poll":
+            from signal_engine.perpetual_dashboard import api_poll
+            try:self._send_json(api_poll(parse_qs(parsed.query)))
+            except Exception as exc:self._send_json({"error":str(exc)},status=400)
+            return
         self._send(_page())
     def _api_poll(self,query):
         try:
