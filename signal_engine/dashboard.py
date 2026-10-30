@@ -184,7 +184,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 else:
                     age_text = f"{signal_age // 3600} ساعت و {(signal_age % 3600) // 60} دقیقه قبل"
                 recent_signal_text = (
-                    f"آخرین سیگنال استراتژی: {signal_label} | وضعیت: {signal_status}\\n"
+                    f"آخرین سیگنال استراتژی: {signal_label} | وضعیت: {signal_status}\n"
                     f"زمان کندل سیگنال (محلی): {signal_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
                     f"زمان UTC: {signal_closed.isoformat()} | {age_text}"
                 )
@@ -210,7 +210,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             message = (
                 f"تصمیم فعلی: {label} | نماد: {market} | تایم‌فریم: {timeframe} | "
                 f"استراتژی: {strategy_name}{levels}\n"
-                f"{recent_signal_text}\\n"
+                f"{recent_signal_text}\n"
                 f"وضعیت داده: {'تازه' if fresh else 'کهنه'} | منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
             )
             self._send(_page(
