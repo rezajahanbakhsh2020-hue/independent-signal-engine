@@ -99,7 +99,7 @@ def run_one(d, name, entry, exit_sig, max_hold):
             if ex[i] or held>=max_hold:
                 exit_px=o[i+1]*(1-adverse)
                 fee=abs(exit_px*qty)*fee_rate
-                pnl=qty*(exit_px-fill)-fee
+                pnl=qty*(exit_px-fill)-entry_fee-fee
                 equity+=qty*(exit_px-fill)-fee
                 gross_turnover+=fill*qty+exit_px*qty
                 trades.append({"entry_time":d.index[entry_i].isoformat(),"exit_time":d.index[i+1].isoformat(),
@@ -116,9 +116,9 @@ def run_one(d, name, entry, exit_sig, max_hold):
         mtm=equity if pos is None else equity+pos[1]*(c[i]-pos[2])
         peak=max(peak,mtm); maxdd=min(maxdd,(mtm/peak-1) if peak else 0)
     if pos is not None:
-        side,qty,fill,entry_i=pos
+        side,qty,fill,entry_i,entry_fee=pos
         exit_px=c[-1]*(1-adverse); fee=exit_px*qty*fee_rate
-        pnl=qty*(exit_px-fill)-fee; equity+=qty*(exit_px-fill)-fee
+        pnl=qty*(exit_px-fill)-entry_fee-fee; equity+=qty*(exit_px-fill)-fee
         gross_turnover+=fill*qty+exit_px*qty
         trades.append({"entry_time":d.index[entry_i].isoformat(),"exit_time":d.index[-1].isoformat(),
                        "entry":fill,"exit":exit_px,"qty":qty,"net_pnl":pnl,
@@ -126,7 +126,6 @@ def run_one(d, name, entry, exit_sig, max_hold):
                        "exit_reason":"end_of_data"})
     wins=[t["net_pnl"] for t in trades if t["net_pnl"]>0]
     losses=[t["net_pnl"] for t in trades if t["net_pnl"]<0]
-    rets=np.array([t["net_pnl"]/(INITIAL_EQUITY if i==0 else max(1,INITIAL_EQUITY)) for i,t in enumerate(trades)])
     return {"strategy":name,"max_hold_bars":max_hold,"trades":len(trades),"wins":len(wins),"losses":len(losses),
             "win_rate_pct":round(100*len(wins)/len(trades),3) if trades else None,
             "net_return_pct":round((equity/INITIAL_EQUITY-1)*100,4),
