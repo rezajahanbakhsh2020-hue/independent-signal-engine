@@ -1,12 +1,12 @@
-"""Fail-closed public crypto OHLCV provider rotation.
+"""Fail-closed public crypto OHLCV provider failover.
 
-Provider priority is explicit and deterministic, with continuous rotation:
-Bitget -> KuCoin -> HTX -> MEXC -> Bitget ...
+Provider priority is explicit and deterministic: Bitget -> KuCoin -> HTX ->
+MEXC. Each provider is attempted once per poll and receives a bounded elapsed
+time budget, including all pagination requests.
 
 Each provider independently supplies its own usable OHLCV response. Partial
 history, gaps, and deduplicated timestamps are tolerated; data from providers
-is never mixed. Every HTTP request uses the same bounded timeout; no credentials
-or trading endpoints are used.
+is never mixed. No credentials or trading endpoints are used.
 """
 from __future__ import annotations
 
@@ -309,7 +309,7 @@ def fetch_range(
     end_utc: pd.Timestamp,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> pd.DataFrame:
-    """Fetch a complete range from the first available provider; never mix."""
+    """Fetch usable OHLCV from the first available provider; never mix sources."""
     market = validate_crypto_symbol(symbol)
     tf = validate_timeframe(timeframe)
     start, end = _utc(start_utc, "start_utc"), _utc(end_utc, "end_utc")
