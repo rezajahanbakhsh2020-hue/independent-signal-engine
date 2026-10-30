@@ -31,10 +31,7 @@ def _page() -> str:
     provider_options = "".join(
         f'<option value="{html.escape(p)}">{html.escape(p)}</option>' for p in PROVIDERS
     )
-    market_options = "".join(
-        f'<option value="{s}"{" selected" if s == "BTCUSDT" else ""}>{s}</option>'
-        for s in symbols
-    )
+    market_options = '<input id="symbol" name="symbol" value="BTCUSDT" placeholder="مثلاً BTCUSDT" pattern="[A-Za-z0-9]{2,20}USDT" required>'
     timeframe_options = "".join(
         f'<option value="{tf}"{" selected" if tf == "1m" else ""}>{tf}</option>'
         for tf in TIMEFRAMES
@@ -70,11 +67,11 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 .error{{color:#ff8999;white-space:pre-wrap}}.warning{{color:var(--gold)}}
 @media(max-width:600px){{main{{padding:14px 10px 35px}}#chart{{height:470px}}.decision{{font-size:26px}}}}
 </style></head><body><main>
-<h1>بازار Perpetual</h1>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><h1>بازار Perpetual</h1><a href="/" style="color:#8fd9c2;font-weight:750;text-decoration:none">بازگشت به داشبورد اصلی ←</a></div>
 <p class="intro">صفحه مستقل قراردادهای دائمی USDT؛ انتخاب صرافی اجباری است و هیچ داده‌ای از Spot یا صرافی دیگر جایگزین نمی‌شود.</p>
 <form id="controls" class="panel"><div class="controls">
 <div><label for="provider">منبع دقیق داده</label><select id="provider" name="provider">{provider_options}</select></div>
-<div><label for="symbol">نماد پایه بازار</label><select id="symbol" name="symbol">{market_options}</select></div>
+<div><label for="symbol">نماد پایه بازار (USDT)</label>{market_options}</div>
 <div><label for="timeframe">تایم‌فریم مستقل</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
 <div><label for="days">تاریخچه کندل‌ها (روز، حداکثر ۳۰)</label><input id="days" name="days" type="number" min="1" max="30" value="30"></div>
