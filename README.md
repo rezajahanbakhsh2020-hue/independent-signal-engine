@@ -26,7 +26,7 @@ signal-dashboard
 
 The dashboard opens at `http://127.0.0.1:8765`. If the browser does not open automatically, enter that address manually. Stop the local server with `Ctrl+C`.
 
-Choose the market, timeframe, strategy and data lookback in the page, then press **دریافت آخرین سیگنال و نمایش نمودار**. The latest BUY / SELL / NO TRADE decision, the chart, historical signal markers and source/freshness details are shown together.
+Choose the market, timeframe, strategy and data lookback (1–90 days) in the page, then press **دریافت آخرین سیگنال و نمایش نمودار**. The latest BUY / SELL / NO TRADE decision, the chart, historical signal markers and source/freshness details are shown together.
 
 The dashboard binds only to localhost. It does not expose a public server, request credentials, store secrets, or place orders.
 
