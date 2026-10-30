@@ -37,14 +37,17 @@ def _market_data(market,timeframe,start,end):
         from signal_engine.data.crypto_source import fetch_range
     return fetch_range(market,timeframe,start,end)
 
-def _record_events(df,strategy,market,timeframe):
+def _record_events(df,market,timeframe):
     duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); now=pd.Timestamp.now(tz="UTC").isoformat()
-    transitions=transition_direction(strategy.raw_direction(df)); records=[]
-    for stamp,side in transitions.items():
-        if int(side) not in {-1,1}: continue
-        candle_open=pd.Timestamp(stamp); signal_time=candle_open+duration
-        key="|".join((market,timeframe,strategy.name,str(int(side)),signal_time.isoformat()))
-        records.append((key,market,timeframe,strategy.name,"BUY" if int(side)>0 else "SELL",signal_time.isoformat(),candle_open.isoformat(),float(df.loc[stamp,"close"]),now))
+    records=[]
+    for strategy_name,strategy_type in STRATEGY_REGISTRY.items():
+        strategy=strategy_type()
+        transitions=transition_direction(strategy.raw_direction(df))
+        for stamp,side in transitions.items():
+            if int(side) not in {-1,1}: continue
+            candle_open=pd.Timestamp(stamp); signal_time=candle_open+duration
+            key="|".join((market,timeframe,strategy_name,str(int(side)),signal_time.isoformat()))
+            records.append((key,market,timeframe,strategy_name,"BUY" if int(side)>0 else "SELL",signal_time.isoformat(),candle_open.isoformat(),float(df.loc[stamp,"close"]),now))
     if records:
         with closing(_database()) as db:
             db.executemany("""INSERT OR IGNORE INTO signal_events
@@ -52,16 +55,16 @@ def _record_events(df,strategy,market,timeframe):
             VALUES (?,?,?,?,?,?,?,?,?)""",records)
             db.commit()
 
-def _history(market,timeframe,strategy):
+def _history(market,timeframe):
     with closing(_database()) as db:
-        rows=db.execute("""SELECT side,signal_time_utc,close_price,recorded_at_utc FROM signal_events
-        WHERE market=? AND timeframe=? AND strategy=? ORDER BY signal_time_utc DESC LIMIT ?""",
-        (market,timeframe,strategy,HISTORY_LIMIT)).fetchall()
+        rows=db.execute("""SELECT side,signal_time_utc,close_price,recorded_at_utc,strategy,market,timeframe FROM signal_events
+        WHERE market=? AND timeframe=? ORDER BY signal_time_utc DESC, recorded_at_utc DESC LIMIT ?""",
+        (market,timeframe,HISTORY_LIMIT)).fetchall()
     now=pd.Timestamp.now(tz="UTC"); result=[]
-    for side,signal_time,price,recorded_at in rows:
+    for side,signal_time,price,recorded_at,strategy_name,event_market,event_timeframe in rows:
         stamp=pd.Timestamp(signal_time); age=max(0,int((now-stamp).total_seconds()))
         age_text=f"{age//60} دقیقه قبل" if age<3600 else f"{age//3600} ساعت و {(age%3600)//60} دقیقه قبل"
-        result.append({"side":side,"signal_time_utc":stamp.isoformat(),"signal_time_local":stamp.to_pydatetime().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),"age_seconds":age,"age_text":age_text,"close_price":price,"recorded_at_utc":recorded_at})
+        result.append({"side":side,"signal_time_utc":stamp.isoformat(),"signal_time_local":stamp.to_pydatetime().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),"age_seconds":age,"age_text":age_text,"close_price":price,"recorded_at_utc":recorded_at,"strategy":strategy_name,"market":event_market,"timeframe":event_timeframe})
     return result
 
 def _poll(market,timeframe,strategy_name,days):
@@ -75,7 +78,7 @@ def _poll(market,timeframe,strategy_name,days):
     strategy=STRATEGY_REGISTRY[strategy_name]()
     decision=latest_decision_report(df,strategy,RiskConfig(),market,timeframe,provenance=str(df.attrs.get("source","public market data")))
     if not fresh: decision["decision"]={"label":"NO TRADE","reason":"stale_data"}
-    _record_events(df,strategy,market,timeframe)
+    _record_events(df,market,timeframe)
     detail=decision.get("decision",{}); label=detail.get("label","NO TRADE")
     transitions=transition_direction(strategy.raw_direction(df))
     positions=[i for i,value in enumerate(transitions.tolist()) if int(value) in {-1,1}]
@@ -84,7 +87,7 @@ def _poll(market,timeframe,strategy_name,days):
         pos=positions[-1]; stamp=pd.Timestamp(df.index[pos])+duration
         latest={"side":"BUY" if int(transitions.iloc[pos])>0 else "SELL","signal_time_utc":stamp.isoformat(),"signal_time_local":stamp.to_pydatetime().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),"age_seconds":max(0,int((now-stamp).total_seconds()))}
     chart=build_chart_html(df,market=market,timeframe=timeframe,strategy_name=strategy_name,strategy_params={},strategy=strategy,latest_decision=decision)
-    return {"market":market,"timeframe":timeframe,"strategy":strategy_name,"decision":detail,"decision_label":label,"fresh":fresh,"data_age_seconds":int(age_seconds),"source":df.attrs.get("source","public market data"),"provider":df.attrs.get("provider","BiQuote" if market=="XAUUSD" else "unknown"),"provider_attempts":df.attrs.get("provider_attempts",1),"provider_failures":list(df.attrs.get("provider_failures",())),"retrieval_time_utc":df.attrs.get("retrieval_time_utc",""),"closed_candles":len(df),"latest_closed_candle_utc":df.index[-1].isoformat(),"latest_signal":latest,"history":_history(market,timeframe,strategy_name),"chart":chart,"polled_at_utc":now.isoformat()}
+    return {"market":market,"timeframe":timeframe,"strategy":strategy_name,"decision":detail,"decision_label":label,"fresh":fresh,"data_age_seconds":int(age_seconds),"source":df.attrs.get("source","public market data"),"provider":df.attrs.get("provider","BiQuote" if market=="XAUUSD" else "unknown"),"provider_attempts":df.attrs.get("provider_attempts",1),"provider_failures":list(df.attrs.get("provider_failures",())),"retrieval_time_utc":df.attrs.get("retrieval_time_utc",""),"closed_candles":len(df),"latest_closed_candle_utc":df.index[-1].isoformat(),"latest_signal":latest,"history":_history(market,timeframe),"chart":chart,"polled_at_utc":now.isoformat()}
 
 def _page():
     market_options=("BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","XAUUSD")
@@ -131,9 +134,10 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
   for(const item of items) {{
    const card=document.createElement("article");card.className="event"+(item.age_seconds>3600?" old":"");
    const side=document.createElement("div");side.className="side "+sideClass(item.side);side.textContent=item.side;
+   const scope=document.createElement("div");scope.className="time";scope.textContent=item.market+" · "+item.timeframe+" · "+item.strategy;
    const time=document.createElement("div");time.className="time";time.textContent=item.signal_time_local+" · "+item.age_text;
    const price=document.createElement("div");price.className="price";price.textContent="قیمت بسته‌شدن کندل: "+Number(item.close_price).toLocaleString(undefined,{{maximumFractionDigits:8}});
-   card.append(side,time,price);events.append(card);
+   card.append(side,scope,time,price);events.append(card);
   }}
  }}
  async function poll() {{
