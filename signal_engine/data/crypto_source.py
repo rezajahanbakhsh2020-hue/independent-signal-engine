@@ -151,7 +151,7 @@ def _gate(symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp,
             if not isinstance(item, list) or len(item) < 6:
                 raise RuntimeError("malformed Gate candlestick")
             stamp_s = int(item[0])
-            if start_s <= stamp_s < end_s:
+            if cursor <= stamp_s < page_end:
                 rows.append({
                     "timestamp": pd.Timestamp(stamp_s, unit="s", tz="UTC"),
                     "open": float(item[5]), "high": float(item[3]),
@@ -187,7 +187,7 @@ def _kucoin(symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp,
             if not isinstance(item, list) or len(item) < 6:
                 raise RuntimeError("malformed KuCoin candle")
             stamp_s = int(item[0])
-            if start_s <= stamp_s < end_s:
+            if cursor <= stamp_s < page_end:
                 rows.append({
                     "timestamp": pd.Timestamp(stamp_s, unit="s", tz="UTC"),
                     "open": float(item[1]), "high": float(item[3]),
