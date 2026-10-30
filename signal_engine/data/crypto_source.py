@@ -1,7 +1,7 @@
 """Fail-closed public crypto OHLCV provider rotation.
 
 Provider priority is explicit and deterministic, with continuous rotation:
-KuCoin -> Bitget -> HTX -> MEXC -> KuCoin ...
+Bitget -> KuCoin -> HTX -> MEXC -> Bitget ...
 
 Each provider independently supplies its own usable OHLCV response. Partial
 history, gaps, and deduplicated timestamps are tolerated; data from providers
@@ -21,7 +21,7 @@ import pandas as pd
 from signal_engine.constants import validate_crypto_symbol, validate_timeframe
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
-DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_TIMEOUT_SECONDS = 10.0
 MAX_REQUESTS = 300
 LIMIT = 1000
 
@@ -308,8 +308,8 @@ def fetch_range(
         raise DataValidationError("timeout_seconds must be positive")
 
     providers = (
-        ("KuCoin", lambda: _kucoin(market, tf, start, end, timeout_seconds)),
         ("Bitget", lambda: _bitget(market, tf, start, end, timeout_seconds)),
+        ("KuCoin", lambda: _kucoin(market, tf, start, end, timeout_seconds)),
         ("HTX", lambda: _htx(market, tf, start, end, timeout_seconds)),
         ("MEXC", lambda: _mexc(market, tf, start, end, timeout_seconds)),
     )
