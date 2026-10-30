@@ -163,6 +163,8 @@ def _bitget(symbol: str, tf: str, start: pd.Timestamp, end: pd.Timestamp,
                     "high": float(item[2]), "low": float(item[3]),
                     "close": float(item[4]), "volume": float(item[5])})
         cursor = page_end
+        if cursor < end_ms:
+            time.sleep(0.06)
     else:
         raise RuntimeError("Bitget perpetual pagination limit reached")
     return _frame(rows, "Bitget", symbol, contract, tf, start, end)
@@ -199,6 +201,8 @@ def _kucoin(symbol: str, tf: str, start: pd.Timestamp, end: pd.Timestamp,
                     "low": float(item[3]), "close": float(item[4]),
                     "volume": float(item[5])})
         cursor = page_end
+        if cursor < end_ms:
+            time.sleep(0.06)
     else:
         raise RuntimeError("KuCoin perpetual pagination limit reached")
     return _frame(rows, "KuCoin", symbol, contract, tf, start, end)
@@ -235,6 +239,8 @@ def _htx(symbol: str, tf: str, start: pd.Timestamp, end: pd.Timestamp,
                     "low": float(item["low"]), "close": float(item["close"]),
                     "volume": float(item.get("vol", item.get("amount", 0)))})
         cursor = page_end
+        if cursor < end_s:
+            time.sleep(0.06)
     else:
         raise RuntimeError("HTX perpetual pagination limit reached")
     return _frame(rows, "HTX", symbol, contract, tf, start, end)
@@ -273,6 +279,8 @@ def _mexc(symbol: str, tf: str, start: pd.Timestamp, end: pd.Timestamp,
                     "low": float(columns[2][i]), "close": float(columns[3][i]),
                     "volume": float(columns[4][i])})
         cursor = page_end
+        if cursor < end_s:
+            time.sleep(0.06)
     else:
         raise RuntimeError("MEXC perpetual pagination limit reached")
     return _frame(rows, "MEXC", symbol, contract, tf, start, end)
