@@ -109,6 +109,8 @@ def test_perpetual_page_is_separate_and_identifies_selected_exchange():
     assert "PERPETUAL" in page
     assert "Mark Price" in page
     assert "Funding" in page
+    assert '<select id="symbol" name="symbol"' in page
+    assert "/api/perpetual/symbols?provider=" in page
 
 
 def test_existing_dashboard_links_to_separate_perpetual_route():
