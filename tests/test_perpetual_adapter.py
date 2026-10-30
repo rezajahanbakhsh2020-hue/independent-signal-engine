@@ -99,7 +99,6 @@ def test_perpetual_page_is_separate_and_identifies_selected_exchange():
     from signal_engine.perpetual_dashboard import _page
 
     page = _page()
-    assert 'action' not in page or 'perpetual' in page.lower()
     for provider in source.PROVIDERS:
         assert provider in page
     for timeframe in source.TIMEFRAME_SECONDS:
@@ -107,3 +106,11 @@ def test_perpetual_page_is_separate_and_identifies_selected_exchange():
     assert "PERPETUAL" in page
     assert "Mark Price" in page
     assert "Funding" in page
+
+
+def test_existing_dashboard_links_to_separate_perpetual_route():
+    from signal_engine.dashboard import _page
+
+    existing = _page()
+    assert 'href="/perpetual"' in existing
+    assert "ورود به صفحه مستقل Perpetual" in existing
