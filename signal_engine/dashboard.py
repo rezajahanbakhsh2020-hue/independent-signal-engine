@@ -16,7 +16,6 @@ from signal_engine.strategies.base import transition_direction
 
 TIMEFRAME_DURATION = {"1m":timedelta(minutes=1),"5m":timedelta(minutes=5),"15m":timedelta(minutes=15),"30m":timedelta(minutes=30),"1H":timedelta(hours=1),"4H":timedelta(hours=4),"1D":timedelta(days=1)}
 POLL_SECONDS = 10
-HISTORY_LIMIT = 200
 DB_PATH = Path.home() / ".signal-engine" / "signal-history.sqlite3"
 
 def _database():
@@ -58,8 +57,8 @@ def _record_events(df,market,timeframe):
 def _history(market,timeframe):
     with closing(_database()) as db:
         rows=db.execute("""SELECT side,signal_time_utc,close_price,recorded_at_utc,strategy,market,timeframe FROM signal_events
-        WHERE market=? AND timeframe=? ORDER BY signal_time_utc DESC, recorded_at_utc DESC LIMIT ?""",
-        (market,timeframe,HISTORY_LIMIT)).fetchall()
+        WHERE market=? AND timeframe=? ORDER BY signal_time_utc DESC, recorded_at_utc DESC""",
+        (market,timeframe)).fetchall()
     now=pd.Timestamp.now(tz="UTC"); result=[]
     for side,signal_time,price,recorded_at,strategy_name,event_market,event_timeframe in rows:
         stamp=pd.Timestamp(signal_time); age=max(0,int((now-stamp).total_seconds()))
