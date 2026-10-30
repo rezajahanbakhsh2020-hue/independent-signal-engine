@@ -7,7 +7,7 @@ A small, single-purpose market signal application. Install it once, start one lo
 - `Bollinger_Reversion`: original Bollinger re-entry rules, period 20 and 2.0 standard deviations.
 - `RSI_Reversal`: original Wilder RSI(14) rules, BUY above 30 after an oversold reading and SELL below 70 after an overbought reading.
 
-No other strategy is registered, selectable, or added by the dashboard. Strategy logic and parameters are not user-configurable.
+No other strategy is registered or selectable. The dashboard uses the original strategy defaults and exposes no parameter controls.
 
 ## Supported markets and timeframes
 
