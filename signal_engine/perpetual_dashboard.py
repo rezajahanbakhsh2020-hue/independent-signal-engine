@@ -85,13 +85,13 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 <div class="metric"><span class="muted">تعداد کندل بسته</span><b id="candle-count">—</b></div>
 <div class="metric"><span class="muted">آخرین کندل UTC</span><b id="last-candle">—</b></div>
 <div class="metric"><span class="muted">تازگی داده</span><b id="freshness">—</b></div>
-</div><p class="status" id="decision-reason"></p>
+</div><p class="status" id="decision-reason"></p><p class="status" id="signal-diagnostics">پس از دریافت داده، تعداد رویدادهای استراتژی و وضعیت محاسبه ریسک نمایش داده می‌شود.</p>
 </section>
 <h2>نمودار کندلی Perpetual و سطوح سیگنال</h2>
 <section class="panel"><canvas id="chart" aria-label="Perpetual candlestick chart"></canvas>
 <div class="chart-help">نشانگر BUY/SELL روی کندل تصمیم نمایش داده می‌شود. خطوط افقی هر سیگنال شامل Entry، Stop Loss و TP1/TP2/TP3 است. همه زمان‌ها UTC هستند. نمودار تمام کندل‌های برگشتی در بازه انتخاب‌شده را دریافت می‌کند؛ محدودیت ۳۰۰ کندل ندارد.</div></section>
 <h2>سیگنال‌های همین نمودار <span class="muted" id="signal-count"></span></h2>
-<section class="panel table-wrap"><table><thead><tr><th>جهت</th><th>زمان تصمیم UTC</th><th>استراتژی</th><th>Entry</th><th>Stop Loss</th><th>TP1</th><th>TP2</th><th>TP3</th></tr></thead><tbody id="signals"><tr><td colspan="8" class="muted">هنوز داده دریافت نشده است.</td></tr></tbody></table></section>
+<section class="panel table-wrap"><table><thead><tr><th>جهت</th><th>زمان تصمیم UTC</th><th>استراتژی</th><th>Entry</th><th>Stop Loss</th><th>TP1</th><th>TP2</th><th>TP3</th><th>وضعیت سطوح ریسک</th></tr></thead><tbody id="signals"><tr><td colspan="9" class="muted">هنوز داده دریافت نشده است.</td></tr></tbody></table></section>
 <p class="status">فقط کندل بسته‌شده؛ داده Perpetual از همان صرافی انتخاب‌شده؛ بدون سفارش‌گذاری. اگر قرارداد یا نماد در صرافی انتخابی موجود نباشد، درخواست با خطا متوقف می‌شود و منبع دیگری جایگزین نمی‌شود. این صفحه قیمت Trade/Contract را نمایش می‌دهد، نه Mark Price یا Index Price. محاسبه سطوح فعلاً Funding را لحاظ نمی‌کند؛ سطوح، برآورد هندسی ATR و هزینه عمومی موتور هستند.</p>
 <div id="error" class="error" role="alert"></div>
 </main><script>
@@ -145,10 +145,11 @@ function render(data){{
  el("freshness").textContent=data.fresh?"FRESH":"STALE";
  el("freshness").className=data.fresh?"green":"gold";
  el("signal-count").textContent="("+signalData.length+")";
+ const d=data.signal_diagnostics||{};el("signal-diagnostics").textContent="رویدادهای خام استراتژی: "+(d.strategy_events??"—")+" · رویدادهای دارای کندل اجرای بعدی: "+(d.actionable_events??"—")+" · سیگنال‌های منتظر کندل بعدی: "+(d.pending_events??"—")+" · سیگنال با سطوح ریسک ناموجود: "+(d.risk_levels_unavailable??"—");
  const tbody=el("signals");tbody.replaceChildren();
- if(!signalData.length){{const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=8;td.textContent="در این بازه سیگنال BUY/SELL معتبر ثبت نشده است.";tr.append(td);tbody.append(tr);}}
+ if(!signalData.length){{const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=9;td.textContent="در این بازه رویداد قابل‌اقدام BUY/SELL ثبت نشده است؛ جزئیات در بخش تشخیص سیگنال آمده است.";tr.append(td);tbody.append(tr);}}
  for(const s of signalData.slice().reverse()){{
-  const tr=document.createElement("tr"),values=[s.side,new Date(s.t).toISOString(),s.strategy,fmt(s.entry),fmt(s.stop),fmt(s.tp1),fmt(s.tp2),fmt(s.tp3)];
+  const tr=document.createElement("tr"),values=[s.side,new Date(s.t).toISOString(),s.strategy,fmt(s.entry),fmt(s.stop),fmt(s.tp1),fmt(s.tp2),fmt(s.tp3),s.risk_status==="AVAILABLE"?"سطوح آماده":"سطوح ریسک ناموجود"];
   values.forEach((v,i)=>{{const td=document.createElement("td");td.textContent=v;if(i===0)td.className=s.side==="BUY"?"buy":"sell";tr.append(td);}});tbody.append(tr);
  }}
  draw();
@@ -200,24 +201,40 @@ def _poll(provider: str, symbol: str, timeframe: str, strategy_name: str, days: 
         df["high"], df["low"], df["close"], RISK_CONFIG.atr_window
     )
     signals = []
+    signal_diagnostics = {
+        "strategy_events": 0,
+        "actionable_events": 0,
+        "pending_events": 0,
+        "risk_levels_unavailable": 0,
+    }
     for stamp, side_value in transitions.items():
         side = int(side_value)
         if side not in {-1, 1}:
             continue
+        signal_diagnostics["strategy_events"] += 1
         idx = int(df.index.get_indexer([stamp])[0])
-        if idx < 0 or idx + 1 >= len(df):
+        if idx < 0:
             continue
+        # A decision is actionable only when the following candle exists.
+        # The newest candle's signal remains pending; never invent its entry.
+        if idx + 1 >= len(df):
+            signal_diagnostics["pending_events"] += 1
+            continue
+        signal_diagnostics["actionable_events"] += 1
         levels = _risk_levels_for_event(df, idx, side, atr_values, market, tf)
         if not levels:
-            continue
+            signal_diagnostics["risk_levels_unavailable"] += 1
         decision_stamp = pd.Timestamp(df.index[idx + 1])
         signals.append({
             "t": int(decision_stamp.value // 1_000_000),
             "side": "BUY" if side > 0 else "SELL",
             "strategy": strategy_name,
-            "entry": levels["entry_price"],
-            "stop": levels["stop_loss"],
-            "tp1": levels["tp1"], "tp2": levels["tp2"], "tp3": levels["tp3"],
+            "entry": levels["entry_price"] if levels else None,
+            "stop": levels["stop_loss"] if levels else None,
+            "tp1": levels["tp1"] if levels else None,
+            "tp2": levels["tp2"] if levels else None,
+            "tp3": levels["tp3"] if levels else None,
+            "risk_status": "AVAILABLE" if levels else "UNAVAILABLE",
         })
     candles = [{
         "t": int(pd.Timestamp(stamp).value // 1_000_000),
@@ -230,7 +247,7 @@ def _poll(provider: str, symbol: str, timeframe: str, strategy_name: str, days: 
         "strategy": strategy_name, "source": df.attrs["source"],
         "timestamp_unit": df.attrs["timestamp_unit"],
         "retrieval_time_utc": df.attrs["retrieval_time_utc"],
-        "candles": candles, "signals": signals, "decision": decision,
+        "candles": candles, "signals": signals, "signal_diagnostics": signal_diagnostics, "decision": decision,
         "fresh": fresh, "data_age_seconds": int(age),
         "latest_closed_candle_utc": df.index[-1].isoformat(),
         "validation_report": df.attrs["validation_report"],
