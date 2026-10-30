@@ -22,6 +22,7 @@ from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
 BASE_URL = "https://biquote.io/api/XAUUSD/ohlc"
 MAX_LIMIT = 1000
+MAX_ELAPSED_SECONDS = 90.0
 INTERVALS = {
     "1m": "1m",
     "5m": "5m",
@@ -50,7 +51,7 @@ def _get_page(
     interval: str,
     start: pd.Timestamp,
     end: pd.Timestamp,
-    timeout_seconds: int,
+    timeout_seconds: float,
 ) -> list[dict]:
     params = urllib.parse.urlencode(
         {
@@ -86,8 +87,9 @@ def fetch_range(
     timeframe: str,
     start_utc: pd.Timestamp,
     end_utc: pd.Timestamp,
-    timeout_seconds: int = 30,
+    timeout_seconds: float = 30,
     max_requests: int = 250,
+    max_elapsed_seconds: float = MAX_ELAPSED_SECONDS,
 ) -> pd.DataFrame:
     """Fetch closed XAUUSD candles over a requested UTC range.
 
@@ -105,11 +107,20 @@ def fetch_range(
         raise DataValidationError("end_utc must be later than start_utc")
     if max_requests < 1:
         raise DataValidationError("max_requests must be >= 1")
+    if timeout_seconds <= 0 or max_elapsed_seconds <= 0:
+        raise DataValidationError("timeout_seconds and max_elapsed_seconds must be positive")
 
+    deadline = time.monotonic() + max_elapsed_seconds
+    started = time.monotonic()
     cursor_end = end
     records: dict[pd.Timestamp, dict] = {}
+    pagination_truncated = False
     for page_number in range(max_requests):
-        bars = _get_page(interval, start, cursor_end, timeout_seconds)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            pagination_truncated = True
+            break
+        bars = _get_page(interval, start, cursor_end, min(timeout_seconds, remaining))
         if not bars:
             break
         parsed: list[tuple[pd.Timestamp, dict]] = []
@@ -145,7 +156,11 @@ def fetch_range(
             break
         cursor_end = oldest - pd.Timedelta(milliseconds=1)
         if page_number + 1 < max_requests:
-            time.sleep(0.1)
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                time.sleep(min(0.1, remaining))
+    else:
+        pagination_truncated = True
 
     if not records:
         raise BiQuoteUnavailableError(f"No closed XAUUSD bars retrieved for {tf} in requested range")
@@ -153,6 +168,8 @@ def fetch_range(
     df, report = validate_ohlcv(raw, strict_gap_policy=True)
     df.attrs["source"] = "public:biquote-ohlc"
     df.attrs["provider"] = "BiQuote"
+    df.attrs["pagination_truncated"] = pagination_truncated
+    df.attrs["fetch_elapsed_seconds"] = round(time.monotonic() - started, 3)
     df.attrs["symbol_mapping"] = "XAUUSD->XAUUSD"
     df.attrs["timeframe"] = tf
     df.attrs["provider_interval"] = interval
