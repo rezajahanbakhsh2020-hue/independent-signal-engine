@@ -1,4 +1,4 @@
-"""Small local dashboard for one-step market signal viewing.
+""""Small local dashboard for one-step market signal viewing.
 
 The dashboard is deliberately local-only: it fetches public candles, computes
 one of the two registered strategies, and renders the existing standalone
@@ -68,22 +68,41 @@ p,.muted{{color:#aebbc5}}form,.panel{{background:#192630;border:1px solid #34434
 label{{display:block;color:#bdc9d1;font-size:13px;margin-bottom:6px}}
 input,select,button{{width:100%;padding:11px;border-radius:8px;border:1px solid #52616c;background:#101820;color:#edf2f6;font:inherit}}
 button{{background:#197c68;border:0;font-weight:700;cursor:pointer;margin-top:14px}}
-.notice{{color:#f2c66d;white-space:pre-wrap}}iframe{{display:block;margin-top:14px}}
+button:disabled{{opacity:.65;cursor:wait}}
+.notice{{color:#f2c66d;white-space:pre-wrap}}
+.loading{{display:none;color:#f2c66d;background:#26313a;border-radius:8px;padding:12px;margin:12px 0}}
+.loading.visible{{display:block}}
+iframe{{display:block;margin-top:14px}}
 </style></head><body><main>
 <h1>داشبورد سیگنال</h1>
 <p>دریافت داده، محاسبه سیگنال و نمودار در یک صفحه؛ فقط دو استراتژی فعال. بدون اجرای معامله.</p>
-<form method="get" action="/">
+<form id="signal-form" method="get" action="/">
 <div class="controls">
 <div><label for="market">نماد بازار</label><input id="market" name="market" value="{html.escape(market)}" required placeholder="BTCUSDT یا XAUUSD"></div>
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
 <div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="{days}"></div>
-</div><button type="submit">دریافت آخرین سیگنال و نمایش نمودار</button>
+</div><button id="submit-button" type="submit">دریافت آخرین سیگنال و نمایش نمودار</button>
+<div id="loading-status" class="loading" role="status" aria-live="polite">در حال دریافت داده‌های بازار و محاسبه سیگنال؛ لطفاً منتظر بمانید...</div>
 </form>
 {f'<div class="panel notice">{html.escape(message)}</div>' if message else ''}
 {frame}
 <div class="muted">داده کهنه یا کندل ناتمام به‌عنوان سیگنال معتبر نمایش داده نمی‌شود. نشانگرهای گذشته سفارش واقعی نیستند.</div>
-</main></body></html>"""
+</main>
+<script>
+(() => {{
+  const form = document.getElementById("signal-form");
+  const button = document.getElementById("submit-button");
+  const status = document.getElementById("loading-status");
+  if (!form || !button || !status) return;
+  form.addEventListener("submit", () => {{
+    status.classList.add("visible");
+    button.disabled = true;
+    button.textContent = "در حال دریافت داده...";
+  }});
+}})();
+</script>
+</body></html>"""
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -162,7 +181,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(encoded)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(encoded)
+        try:
+            self.wfile.write(encoded)
+        except BrokenPipeError:
+            # The browser may cancel a slow request while market data is unavailable.
+            return
 
     def log_message(self, _format: str, *_args) -> None:
         return
@@ -180,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--port must be between 1 and 65535.")
     server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
     url = f"http://127.0.0.1:{args.port}/"
-    print(f"Signal dashboard: {url} (Ctrl+C to stop)")
+    print(f"Signal dashboard: {url} (Ctrl+C to stop)", flush=True)
     if not args.no_browser:
         webbrowser.open(url)
     try:
