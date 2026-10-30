@@ -325,6 +325,7 @@ def list_symbols(provider: str, timeout_seconds: float = 15.0) -> list[str]:
             and row.get("quoteCurrency") == "USDT"
             and row.get("settleCurrency") == "USDT"
             and row.get("status") == "Open"
+            and row.get("expireDate") is None
         ]
     elif provider == "HTX":
         payload = _json("https://api.hbdm.com/linear-swap-api/v1/swap_contract_info", timeout_seconds)
