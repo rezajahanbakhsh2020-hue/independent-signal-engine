@@ -13,7 +13,7 @@ from signal_engine.backtest import (
 )
 from signal_engine.data.synthetic import synth_ohlcv
 from signal_engine.risk import RiskConfig, build_signal
-from signal_engine.strategies import CrossoverStrategy
+from signal_engine.strategies.crossover import CrossoverStrategy
 
 
 def test_determinism_same_config_same_result(synth_1h):
