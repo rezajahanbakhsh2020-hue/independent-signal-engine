@@ -50,9 +50,10 @@ def _record_events(df,strategy,market,timeframe):
             db.executemany("""INSERT OR IGNORE INTO signal_events
             (event_key,market,timeframe,strategy,side,signal_time_utc,candle_open_utc,close_price,recorded_at_utc)
             VALUES (?,?,?,?,?,?,?,?,?)""",records)
+            db.commit()
 
 def _history(market,timeframe,strategy):
-    with _database() as db:
+    with closing(_database()) as db:
         rows=db.execute("""SELECT side,signal_time_utc,close_price,recorded_at_utc FROM signal_events
         WHERE market=? AND timeframe=? AND strategy=? ORDER BY signal_time_utc DESC LIMIT ?""",
         (market,timeframe,strategy,HISTORY_LIMIT)).fetchall()
@@ -136,7 +137,11 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
  async function poll() {{
   if(busy||!active)return;busy=true;error.textContent="";
   try {{
-   const response=await fetch("/api/poll?"+new URLSearchParams(new FormData(form)),{{cache:"no-store"}});
+   const q=new URLSearchParams(new FormData(form));
+   const key=[q.get("market"),q.get("timeframe"),q.get("strategy"),q.get("days")].join("|");
+   if(key!==lastConfig){{initialLoaded=false;lastConfig=key;}}
+   if(initialLoaded)q.set("days","1");
+   const response=await fetch("/api/poll?"+q,{{cache:"no-store"}});
    const data=await response.json();if(!response.ok)throw new Error(data.error||"دریافت داده ناموفق بود.");
    decision.textContent=data.decision_label;decision.className="big "+sideClass(data.decision_label);
    meta.textContent=data.market+" · "+data.timeframe+" · "+data.strategy+(data.decision.reason?" · علت: "+data.decision.reason:"");
