@@ -101,12 +101,12 @@ const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
 let candleData=[],signalData=[],chartSignalData=[];
 const fmt=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString(undefined,{{maximumFractionDigits:8}});
 const el=id=>document.getElementById(id);
-async function loadSymbols(){
+async function loadSymbols(){{
  const provider=el("provider"),symbol=el("symbol"),previous=symbol.value;
  symbol.disabled=true;symbol.replaceChildren(new Option("در حال دریافت قراردادهای فعال...",""));
  status.textContent="در حال دریافت فهرست قراردادهای فعال "+provider.value+"...";
- try{
-  const response=await fetch("/api/perpetual/symbols?provider="+encodeURIComponent(provider.value),{cache:"no-store"});
+ try{{
+  const response=await fetch("/api/perpetual/symbols?provider="+encodeURIComponent(provider.value),{{cache:"no-store"}});
   const data=await response.json();if(!response.ok)throw new Error(data.error||"دریافت فهرست نمادها ناموفق بود");
   symbol.replaceChildren();
   for(const value of data.symbols)symbol.add(new Option(value,value));
@@ -114,11 +114,11 @@ async function loadSymbols(){
   if(selected)symbol.value=selected;
   symbol.disabled=!data.symbols.length;
   status.textContent=data.symbols.length+" قرارداد فعال USDT از "+provider.value+" دریافت شد.";
- }catch(err){
+ }}catch(err){{
   symbol.replaceChildren(new Option("فهرست قراردادها در دسترس نیست",""));
   symbol.disabled=true;status.textContent="دریافت فهرست نمادها ناموفق";error.textContent=err.message;
- }
-}
+ }}
+}}
 function draw(){{
  const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
  canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));
