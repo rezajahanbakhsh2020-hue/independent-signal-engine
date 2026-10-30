@@ -19,7 +19,8 @@ dev = [
 ]
 
 [project.scripts]
-signal-engine = "signal_engine.cli:main"\nsignal-dashboard = "signal_engine.dashboard:main"
+signal-engine = "signal_engine.cli:main"
+signal-dashboard = "signal_engine.dashboard:main"
 
 [tool.setuptools.packages.find]
 include = ["signal_engine*"]
