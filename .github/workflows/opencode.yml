@@ -186,25 +186,6 @@ jobs:
           git push origin "$LOCAL_SHA:refs/heads/${RESUME_BRANCH}"
           echo "Published commit $LOCAL_SHA to $RESUME_BRANCH"
 
-      - name: Create pull request
+      - name: Keep PR creation disabled while validation is paused
         if: success()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RESUME_BRANCH: opencode/issue1-20261029091040
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main "$RESUME_BRANCH"
-          ahead="$(git rev-list --count "origin/main..origin/$RESUME_BRANCH")"
-          if [[ "$ahead" == "0" ]]; then
-            echo "Resume branch has no changes beyond main; no PR is needed."
-            exit 0
-          fi
-
-          if gh pr view "$RESUME_BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "A pull request already exists for $RESUME_BRANCH."
-          elif ! gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$RESUME_BRANCH" \
-              --title "Complete independent multi-market signal engine" \
-              --body "Automated implementation from Issue #1. Review the diff and CI results before merging. No automatic merge is performed."; then
-            echo "::warning::The branch was published, but GitHub blocked PR creation with GITHUB_TOKEN. The repository setting 'Allow GitHub Actions to create and approve pull requests' must be enabled, or a PR must be opened through the GitHub integration."
-          fi
+        run: echo "No PR created: repository owner has prohibited test/backtest execution, and opening a PR would trigger the test workflow."
