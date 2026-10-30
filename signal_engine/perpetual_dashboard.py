@@ -89,7 +89,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 </section>
 <h2>نمودار کندلی Perpetual و سطوح سیگنال</h2>
 <section class="panel"><canvas id="chart" aria-label="Perpetual candlestick chart"></canvas>
-<div class="chart-help">نشانگر BUY/SELL روی کندل تصمیم نمایش داده می‌شود. خطوط افقی هر سیگنال شامل Entry، Stop Loss و TP1/TP2/TP3 است. همه زمان‌ها UTC هستند. نمودار تمام کندل‌های برگشتی در بازه انتخاب‌شده را دریافت می‌کند؛ محدودیت ۳۰۰ کندل ندارد.</div></section>
+<div class="chart-help">نشانگر BUY/SELL روی کندل تصمیم نمایش داده می‌شود. خطوط افقی هر سیگنال شامل Entry، Stop Loss و TP1/TP2/TP3 است. همه زمان‌ها UTC هستند. نمودار فقط پنج کندل بسته‌شده اخیرِ تایم‌فریم انتخابی را نمایش می‌دهد. محاسبات استراتژی و تاریخچه کامل سیگنال‌ها حفظ می‌شوند؛ خطوط سطوح فقط برای سیگنال آنلاین جاری نمایش داده می‌شوند.</div></section>
 <h2>سیگنال‌های همین نمودار <span class="muted" id="signal-count"></span></h2>
 <section class="panel table-wrap"><table><thead><tr><th>جهت</th><th>زمان تصمیم UTC</th><th>استراتژی</th><th>Entry</th><th>Stop Loss</th><th>TP1</th><th>TP2</th><th>TP3</th><th>وضعیت سطوح ریسک</th></tr></thead><tbody id="signals"><tr><td colspan="9" class="muted">هنوز داده دریافت نشده است.</td></tr></tbody></table></section>
 <p class="status">فقط کندل بسته‌شده؛ داده Perpetual از همان صرافی انتخاب‌شده؛ بدون سفارش‌گذاری. اگر قرارداد یا نماد در صرافی انتخابی موجود نباشد، درخواست با خطا متوقف می‌شود و منبع دیگری جایگزین نمی‌شود. این صفحه قیمت Trade/Contract را نمایش می‌دهد، نه Mark Price یا Index Price. محاسبه سطوح فعلاً Funding را لحاظ نمی‌کند؛ سطوح، برآورد هندسی ATR و هزینه عمومی موتور هستند.</p>
@@ -98,7 +98,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 (() => {{
 const form=document.getElementById("controls"),status=document.getElementById("status"),error=document.getElementById("error");
 const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
-let candleData=[],signalData=[];
+let candleData=[],signalData=[],chartSignalData=[];
 const fmt=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString(undefined,{{maximumFractionDigits:8}});
 const el=id=>document.getElementById(id);
 function draw(){{
@@ -109,7 +109,7 @@ function draw(){{
  if(!candleData.length){{ctx.fillStyle="#9aabb7";ctx.fillText("No perpetual candles loaded",20,30);return;}}
  const left=74,right=18,top=18,bottom=34,pw=w-left-right,ph=h-top-bottom;
  let lo=Infinity,hi=-Infinity;for(const c of candleData){{lo=Math.min(lo,c.low);hi=Math.max(hi,c.high);}}
- for(const s of signalData)for(const v of [s.entry,s.stop,s.tp1,s.tp2,s.tp3])if(Number.isFinite(v)){{lo=Math.min(lo,v);hi=Math.max(hi,v);}}
+ for(const s of chartSignalData)for(const v of [s.entry,s.stop,s.tp1,s.tp2,s.tp3])if(Number.isFinite(v)){{lo=Math.min(lo,v);hi=Math.max(hi,v);}}
  const pad=Math.max((hi-lo)*.05,Math.abs(hi)*.0002,1e-9);lo-=pad;hi+=pad;
  const y=p=>top+(hi-p)/(hi-lo)*ph;
  ctx.font="11px system-ui";ctx.textAlign="right";ctx.fillStyle="#aebbc5";
@@ -118,7 +118,7 @@ function draw(){{
  candleData.forEach((c,i)=>{{const x=left+(i+.5)*step,up=c.close>=c.open,col=up?"#21c58e":"#ff6177";ctx.strokeStyle=col;ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y(c.high));ctx.lineTo(x,y(c.low));ctx.stroke();const yy=Math.min(y(c.open),y(c.close)),bh=Math.max(1,Math.abs(y(c.open)-y(c.close)));ctx.fillRect(x-bw/2,yy,bw,bh);}});
  const first=candleData[0].t,last=candleData[candleData.length-1].t;
  const xAt=t=>left+((t-first)/(last-first||1))*pw;
- signalData.forEach(s=>{{
+ chartSignalData.forEach(s=>{{
   if(s.t<first||s.t>last)return;const x=xAt(s.t),buy=s.side==="BUY";
   ctx.strokeStyle=buy?"#21c58e":"#ff6177";ctx.fillStyle=ctx.strokeStyle;
   const yy=y(s.entry);ctx.beginPath();ctx.arc(x,yy,5,0,Math.PI*2);ctx.fill();
@@ -139,8 +139,10 @@ function render(data){{
  el("decision").textContent=data.decision.label||"NO TRADE";
  el("decision").className="decision "+(data.decision.label==="BUY"?"green":data.decision.label==="SELL"?"red":"gold");
  el("decision-reason").textContent=data.decision.reason||"";
+ const currentSide=data.fresh&&["BUY","SELL"].includes(data.decision.label)?data.decision.label:null;
+ chartSignalData=currentSide?signalData.filter(s=>s.side===currentSide&&s.t>=candleData[0].t&&s.t<=candleData[candleData.length-1].t).slice(-1):[];
  el("last-price").textContent=fmt(candleData[candleData.length-1].close);
- el("candle-count").textContent=candleData.length.toLocaleString();
+ el("candle-count").textContent=(data.closed_candle_count??candleData.length).toLocaleString();
  el("last-candle").textContent=new Date(candleData[candleData.length-1].t).toISOString();
  el("freshness").textContent=data.fresh?"FRESH":"STALE";
  el("freshness").className=data.fresh?"green":"gold";
@@ -160,7 +162,7 @@ form.addEventListener("submit",async e=>{{
   const q=new URLSearchParams(new FormData(form));
   const response=await fetch("/api/perpetual/poll?"+q.toString(),{{cache:"no-store"}});
   const data=await response.json();if(!response.ok)throw new Error(data.error||"Perpetual provider request failed");
-  render(data);status.textContent="دریافت موفق · "+data.candles.length+" کندل بسته · بدون fallback";status.className="status green";
+  render(data);status.textContent="دریافت موفق · "+data.candles.length+" کندل اخیر در نمودار · "+(data.closed_candle_count??data.candles.length)+" کندل بسته دریافت و تحلیل شد · بدون fallback";status.className="status green";
  }}catch(err){{status.textContent="دریافت ناموفق";status.className="status red";error.textContent=err.message;}}
 }});
 window.addEventListener("resize",()=>{{if(candleData.length)draw();}});
@@ -240,14 +242,15 @@ def _poll(provider: str, symbol: str, timeframe: str, strategy_name: str, days: 
         "t": int(pd.Timestamp(stamp).value // 1_000_000),
         "open": float(row.open), "high": float(row.high),
         "low": float(row.low), "close": float(row.close),
-    } for stamp, row in df.iterrows()]
+    } for stamp, row in df.tail(5).iterrows()]
     return {
         "provider": provider, "market_type": "PERPETUAL", "symbol": market,
         "contract_symbol": df.attrs["contract_symbol"], "timeframe": tf,
         "strategy": strategy_name, "source": df.attrs["source"],
         "timestamp_unit": df.attrs["timestamp_unit"],
         "retrieval_time_utc": df.attrs["retrieval_time_utc"],
-        "candles": candles, "signals": signals, "signal_diagnostics": signal_diagnostics, "decision": decision,
+        "candles": candles, "closed_candle_count": int(len(df)), "chart_candle_limit": 5,
+        "signals": signals, "signal_diagnostics": signal_diagnostics, "decision": decision,
         "fresh": fresh, "data_age_seconds": int(age),
         "latest_closed_candle_utc": df.index[-1].isoformat(),
         "validation_report": df.attrs["validation_report"],
