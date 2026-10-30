@@ -10,7 +10,6 @@ import pandas as pd
 from signal_engine.chart import build_chart_html
 from signal_engine.constants import TIMEFRAMES, validate_market_or_crypto_symbol, validate_timeframe
 from signal_engine.latest_signal import latest_decision_report
-from signal_engine.indicators import atr as atr_indicator
 from signal_engine.risk import RiskConfig
 from signal_engine.strategies import STRATEGY_REGISTRY
 from signal_engine.strategies.base import transition_direction
@@ -24,15 +23,36 @@ RISK_STRUCTURE_BUFFER_ATR = 0.25
 RISK_MIN_STOP_ATR = 1.5
 RISK_MAX_STOP_ATR = 3.5
 RISK_TARGET_MULTIPLES = (1.0, 2.0, 3.0)
-RISK_MODEL = "ATR(14) + 20-bar structure; 0.25 ATR buffer; 1.5-3.5 ATR stop; 1R/2R/3R targets"
+RISK_MODEL = "Wilder ATR(14) + 20-bar structure; 0.25 ATR buffer; 1.5-3.5 ATR stop; 1R/2R/3R targets"
 DB_PATH = Path.home() / ".signal-engine" / "signal-history.sqlite3"
 
-def _risk_levels_for_event(df, signal_idx, side):
+def _wilder_atr_series(df):
+    """Wilder ATR with an SMA seed, then Wilder's recursive smoothing."""
+    previous_close = df["close"].shift(1)
+    true_range = pd.concat(
+        [
+            df["high"] - df["low"],
+            (df["high"] - previous_close).abs(),
+            (df["low"] - previous_close).abs(),
+        ],
+        axis=1,
+    ).max(axis=1)
+    values = pd.Series(float("nan"), index=df.index, dtype=float)
+    if len(df) < RISK_ATR_WINDOW:
+        return values
+    seed_idx = RISK_ATR_WINDOW - 1
+    values.iloc[seed_idx] = float(true_range.iloc[:RISK_ATR_WINDOW].mean())
+    for idx in range(RISK_ATR_WINDOW, len(df)):
+        values.iloc[idx] = (
+            values.iloc[idx - 1] * (RISK_ATR_WINDOW - 1) + float(true_range.iloc[idx])
+        ) / RISK_ATR_WINDOW
+    return values
+
+def _risk_levels_for_event(df, signal_idx, side, atr_values):
     """Causal, display-only risk plan using the signal candle and next candle open."""
     execution_idx = signal_idx + 1
     if signal_idx < RISK_STRUCTURE_LOOKBACK - 1 or execution_idx >= len(df):
         return None
-    atr_values = atr_indicator(df["high"], df["low"], df["close"], window=RISK_ATR_WINDOW)
     atr_value = atr_values.iloc[signal_idx]
     entry = float(df["open"].iloc[execution_idx])
     if pd.isna(atr_value) or not pd.notna(entry) or entry <= 0:
@@ -100,6 +120,7 @@ def _market_data(market,timeframe,start,end):
 def _record_events(df,market,timeframe):
     duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); now=pd.Timestamp.now(tz="UTC").isoformat()
     records=[]
+    atr_values=_wilder_atr_series(df)
     for strategy_name,strategy_type in STRATEGY_REGISTRY.items():
         strategy=strategy_type()
         transitions=transition_direction(strategy.raw_direction(df))
@@ -108,7 +129,7 @@ def _record_events(df,market,timeframe):
             if side not in {-1,1}: continue
             candle_open=pd.Timestamp(stamp); signal_time=candle_open+duration
             key="|".join((market,timeframe,strategy_name,str(side),signal_time.isoformat()))
-            levels=_risk_levels_for_event(df,signal_idx,side) or {}
+            levels=_risk_levels_for_event(df,signal_idx,side,atr_values) or {}
             records.append((key,market,timeframe,strategy_name,"BUY" if side>0 else "SELL",
                 signal_time.isoformat(),candle_open.isoformat(),float(df.loc[stamp,"close"]),now,
                 levels.get("entry_price"),levels.get("stop_loss"),levels.get("tp1"),levels.get("tp2"),
@@ -223,7 +244,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 <section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div id="current-timeframe" class="current-timeframe">1m</div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="last-signal">آخرین سیگنال معتبر پس از دریافت داده نمایش داده می‌شود.</div><div class="meta" id="data-meta"></div></section>
 <h2 class="section-title">تاریخچه سیگنال‌ها <span class="muted" id="event-count"></span></h2><div id="events" class="cards"></div>
 <h2 class="section-title">نمودار کندلی و نشانگرهای استراتژی</h2><section class="panel"><iframe id="chart-frame" title="نمودار کندلی"></iframe></section>
-<p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. سطوح نمایشی ریسک با ATR(14)، ساختار ۲۰ کندل اخیر و حاشیهٔ ۰٫۲۵ ATR محاسبه می‌شوند؛ حد ضرر باید بین ۱٫۵ تا ۳٫۵ ATR باشد و اهداف ۱R، ۲R و ۳R هستند. اگر داده کافی یا حد ضرر ساختاری معتبر نباشد، سطحی ساخته نمی‌شود. این سطوح سفارش واقعی نیستند و تضمین سود محسوب نمی‌شوند.</p><div id="error" class="error" role="alert"></div>
+<p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. سطوح نمایشی ریسک با Wilder ATR(14)، ساختار ۲۰ کندل اخیر و حاشیهٔ ۰٫۲۵ ATR محاسبه می‌شوند؛ حد ضرر باید بین ۱٫۵ تا ۳٫۵ ATR باشد و اهداف ۱R، ۲R و ۳R هستند. اگر داده کافی یا حد ضرر ساختاری معتبر نباشد، سطحی ساخته نمی‌شود. این سطوح سفارش واقعی نیستند و تضمین سود محسوب نمی‌شوند.</p><div id="error" class="error" role="alert"></div>
 </main><script>
 (() => {{
  const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),currentTimeframe=document.getElementById("current-timeframe"),meta=document.getElementById("decision-meta"),lastSignal=document.getElementById("last-signal"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
