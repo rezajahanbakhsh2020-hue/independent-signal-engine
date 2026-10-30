@@ -5,6 +5,11 @@ on:
     paths:
       - scripts/independent_crypto_strategy_sweep.py
       - .github/workflows/independent-crypto-strategy-sweep.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/independent_crypto_strategy_sweep.py
+      - .github/workflows/independent-crypto-strategy-sweep.yml
   workflow_dispatch:
 permissions:
   contents: read
