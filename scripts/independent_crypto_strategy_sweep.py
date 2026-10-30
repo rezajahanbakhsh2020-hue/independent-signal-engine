@@ -94,7 +94,7 @@ def run_one(d, name, entry, exit_sig, max_hold):
     fee_rate=FEE_BPS/10000; adverse=(SPREAD_BPS/2+SLIPPAGE_BPS)/10000
     for i in range(len(d)-1):
         if pos is not None:
-            side,qty,fill,entry_i=pos
+            side,qty,fill,entry_i,entry_fee=pos
             held=i-entry_i+1
             if ex[i] or held>=max_hold:
                 exit_px=o[i+1]*(1-adverse)
@@ -112,7 +112,7 @@ def run_one(d, name, entry, exit_sig, max_hold):
             qty=equity/fill
             fee=fill*qty*fee_rate
             equity-=fee
-            pos=(1,qty,fill,i+1)
+            pos=(1,qty,fill,i+1,fee)
         mtm=equity if pos is None else equity+pos[1]*(c[i]-pos[2])
         peak=max(peak,mtm); maxdd=min(maxdd,(mtm/peak-1) if peak else 0)
     if pos is not None:
