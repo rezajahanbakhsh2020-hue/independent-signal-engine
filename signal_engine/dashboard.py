@@ -1,6 +1,7 @@
 """Local live signal dashboard with a persistent, deduplicated event feed."""
 from __future__ import annotations
 import argparse, html, json, sqlite3, webbrowser
+from contextlib import closing
 from datetime import timedelta
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,7 +46,7 @@ def _record_events(df,strategy,market,timeframe):
         key="|".join((market,timeframe,strategy.name,str(int(side)),signal_time.isoformat()))
         records.append((key,market,timeframe,strategy.name,"BUY" if int(side)>0 else "SELL",signal_time.isoformat(),candle_open.isoformat(),float(df.loc[stamp,"close"]),now))
     if records:
-        with _database() as db:
+        with closing(_database()) as db:
             db.executemany("""INSERT OR IGNORE INTO signal_events
             (event_key,market,timeframe,strategy,side,signal_time_utc,candle_open_utc,close_price,recorded_at_utc)
             VALUES (?,?,?,?,?,?,?,?,?)""",records)
@@ -120,7 +121,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 </main><script>
 (() => {{
  const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),refresh=document.getElementById("refresh"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
- let active=false,timer=null,busy=false;
+ let active=false,timer=null,busy=false,initialLoaded=false,lastConfig="";
  const sideClass=s=>s==="BUY"?"buy":s==="SELL"?"sell":"no-trade";
  function renderCards(items) {{
   events.replaceChildren();document.getElementById("event-count").textContent="("+items.length+")";
@@ -140,7 +141,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
    decision.textContent=data.decision_label;decision.className="big "+sideClass(data.decision_label);
    meta.textContent=data.market+" · "+data.timeframe+" · "+data.strategy+(data.decision.reason?" · علت: "+data.decision.reason:"");
    dataMeta.textContent=(data.fresh?"داده تازه":"داده کهنه")+" · "+data.provider+" · "+data.source+" · "+data.closed_candles+" کندل بسته · تلاش ارائه‌دهندگان: "+data.provider_attempts+" · دریافت: "+data.retrieval_time_utc;
-   renderCards(data.history||[]);if(data.chart)frame.srcdoc=data.chart;
+   initialLoaded=true;renderCards(data.history||[]);if(data.chart)frame.srcdoc=data.chart;
    lastUpdate.textContent="آخرین بررسی: "+new Date(data.polled_at_utc).toLocaleTimeString();
    status.textContent="پایش فعال · بررسی خودکار هر 10 ثانیه";status.className=data.fresh?"fresh":"stale";
   }} catch(e) {{error.textContent="خطا در دریافت داده: "+e.message;status.textContent="پایش فعال است؛ تلاش بعدی خودکار انجام می‌شود.";}}
