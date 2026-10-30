@@ -24,7 +24,7 @@ DISPLAY_COST_CONFIG = CostConfig()
 RISK_TARGET_MULTIPLES = (1.0, 2.0, 3.0)
 RISK_MODEL = (
     "Backtest-aligned RiskConfig: SMA ATR(14) x 2 stop; "
-    "net 1R/2R/3R targets; fee 2 bps/fill, spread 2 bps, slippage 1 bp/fill"
+    "net 1R/2R/3R targets; fee 2 bps/fill, spread 2 bps, slippage 1 bp on entry/stop fills"
 )
 
 
@@ -261,7 +261,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 <section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div id="current-timeframe" class="current-timeframe">1m</div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="last-signal">آخرین سیگنال معتبر پس از دریافت داده نمایش داده می‌شود.</div><div class="meta" id="data-meta"></div></section>
 <h2 class="section-title">تاریخچه سیگنال‌ها <span class="muted" id="event-count"></span></h2><div id="events" class="cards"></div>
 <h2 class="section-title">نمودار کندلی و نشانگرهای استراتژی</h2><section class="panel"><iframe id="chart-frame" title="نمودار کندلی"></iframe></section>
-<p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. سطوح با همان RiskConfig موتور بک‌تست محاسبه می‌شوند: ATR(14) از میانگین سادهٔ True Range و حد ضرر ۲ برابر ATR. قیمت ورود و خروج با فرض کارمزد ۲ واحد پایه در هر سمت، اسپرد کل ۲ واحد پایه و لغزش ۱ واحد پایه در هر سمت برآورد می‌شوند؛ TPها برای بازده خالص ۱R، ۲R و ۳R تنظیم می‌شوند. قیمت‌های نمایش‌داده‌شده برآوردی‌اند، نه تضمین قیمت اجرای واقعی.</p><div id="error" class="error" role="alert"></div>
+<p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. سطوح با همان RiskConfig موتور بک‌تست محاسبه می‌شوند: ATR(14) از میانگین سادهٔ True Range و حد ضرر ۲ برابر ATR. قیمت ورود و خروج با فرض کارمزد ۲ واحد پایه در هر سمت، اسپرد کل ۲ واحد پایه و لغزش ۱ واحد پایه در ورود و خروج حدضرر برآورد می‌شوند؛ TPها برای بازده خالص ۱R، ۲R و ۳R تنظیم می‌شوند. قیمت‌های نمایش‌داده‌شده برآوردی‌اند، نه تضمین قیمت اجرای واقعی.</p><div id="error" class="error" role="alert"></div>
 </main><script>
 (() => {{
  const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),currentTimeframe=document.getElementById("current-timeframe"),meta=document.getElementById("decision-meta"),lastSignal=document.getElementById("last-signal"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
@@ -290,11 +290,11 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
    const price=document.createElement("div");price.className="price";price.textContent="قیمت بسته‌شدن کندل: "+fmt(item.close_price);
    const risk=document.createElement("div");risk.className="risk-levels";
    if([item.entry_price,item.stop_loss,item.tp1,item.tp2,item.tp3].every(value=>value!==null&&value!==undefined&&Number.isFinite(Number(value)))) {{
-    addLevel(risk,"ENTRY",item.entry_price,"risk-entry");
-    addLevel(risk,"STOP LOSS",item.stop_loss,"risk-stop");
-    addLevel(risk,"TAKE PROFIT 1 · 1R",item.tp1,"risk-target");
-    addLevel(risk,"TAKE PROFIT 2 · 2R",item.tp2,"risk-target");
-    addLevel(risk,"TAKE PROFIT 3 · 3R",item.tp3,"risk-target");
+    addLevel(risk,"ENTRY · ALL-IN EST.",item.entry_price,"risk-entry");
+    addLevel(risk,"STOP LOSS · TRIGGER",item.stop_loss,"risk-stop");
+    addLevel(risk,"TAKE PROFIT 1 · NET 1R",item.tp1,"risk-target");
+    addLevel(risk,"TAKE PROFIT 2 · NET 2R",item.tp2,"risk-target");
+    addLevel(risk,"TAKE PROFIT 3 · NET 3R",item.tp3,"risk-target");
    }} else {{
     const unavailable=document.createElement("div");unavailable.className="risk-na";
     unavailable.textContent="سطوح ریسک معتبر برای این سیگنال قابل محاسبه نیست؛ داده یا ساختار کافی موجود نیست.";
