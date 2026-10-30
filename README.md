@@ -34,7 +34,7 @@ The dashboard binds only to localhost. It does not expose a public server, reque
 
 - Only completed candles are considered.
 - Stale data, invalid OHLC data, insufficient history and invalid risk geometry fail closed; they do not create fabricated entries, stops or targets.
-- Crypto OHLCV failover priority is KuCoin → Bitget → HTX → MEXC. Binance is not configured as a provider. Each source must independently return the complete requested candle grid with no gaps or duplicate timestamps; candles from different exchanges are never mixed. Every individual HTTP request has a 2.5-second timeout. HTX's limited recent-history endpoint is accepted only when it covers the entire requested range. XAUUSD remains on its separate BiQuote adapter.
+- Crypto OHLCV failover priority is KuCoin → Bitget → HTX → MEXC. Each source must independently return the complete requested candle grid with no gaps or duplicate timestamps; candles from different exchanges are never mixed. Every individual HTTP request has a 2.5-second timeout. HTX's limited recent-history endpoint is accepted only when it covers the entire requested range. XAUUSD remains on its separate BiQuote adapter.
 - BiQuote `tickVolume` is a tick count, not centralized exchange-traded volume.
 - Historical markers are research signals, not executed orders. A valid `NO TRADE` is an acceptable result.
 - No profitability is guaranteed.
