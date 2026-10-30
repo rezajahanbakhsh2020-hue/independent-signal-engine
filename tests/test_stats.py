@@ -7,7 +7,7 @@ import pytest
 from signal_engine.data.synthetic import synth_ohlcv
 from signal_engine.backtest import CostConfig
 from signal_engine.risk import RiskConfig
-from tests._strategy_fixtures import CrossoverStrategy
+from _strategy_fixtures import CrossoverStrategy
 from signal_engine.stats import RandomizedSideStrategy, run_randomized_baseline
 
 
