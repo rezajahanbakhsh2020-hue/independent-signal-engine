@@ -142,12 +142,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
             label = decision.get("decision", {}).get("label", "NO TRADE")
             source = df.attrs.get("source", "public market data")
             retrieval = df.attrs.get("retrieval_time_utc", "نامشخص")
+            detail = decision.get("decision", {})
+            reason = detail.get("reason")
+            levels = ""
+            if label in {"BUY", "SELL"}:
+                levels = (
+                    f"\\nورود: {detail.get('entry')} | حد ضرر: {detail.get('stop')} | "
+                    f"هدف: {detail.get('target')}"
+                )
+            elif reason:
+                levels = f"\\nعلت: {reason}"
             message = (
                 f"تصمیم فعلی: {label} | نماد: {market} | تایم‌فریم: {timeframe} | "
-                f"استراتژی: {strategy_name}\n"
+                f"استراتژی: {strategy_name}{levels}\\n"
                 f"منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
             )
-            self._send(_page(message, chart, market=market, timeframe=timeframe, strategy=strategy_name))
+            self._send(_page(
+                message, chart, market=market, timeframe=timeframe,
+                strategy=strategy_name, days=days,
+            ))
         except Exception as exc:
             self._send(_page(f"خطا: {exc}", market=market, timeframe=timeframe, strategy=strategy_name), status=400)
 
