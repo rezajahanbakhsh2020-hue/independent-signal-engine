@@ -104,7 +104,7 @@ def _validated_frame(
     # Full-range equality is intentionally not required; partial histories are
     # usable and must not force a provider failover.
     step_ns = step * 1_000_000_000
-    aligned = (frame.index.asi8 % step_ns) == 0
+    aligned = (frame.index.as_unit("ns").asi8 % step_ns) == 0
     in_range = (frame.index >= pd.Timestamp(first_open, unit="s", tz="UTC")) & (
         frame.index <= pd.Timestamp(last_closed_open, unit="s", tz="UTC")
     )
