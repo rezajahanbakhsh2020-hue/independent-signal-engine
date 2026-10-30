@@ -93,6 +93,7 @@ def run_one(d, name, entry, exit_sig, max_hold):
     equity=INITIAL_EQUITY; peak=equity; maxdd=0.0; pos=None; trades=[]; gross_turnover=0.0
     fee_rate=FEE_BPS/10000; adverse=(SPREAD_BPS/2+SLIPPAGE_BPS)/10000
     for i in range(len(d)-1):
+        opened_this_bar=False
         if pos is not None:
             side,qty,fill,entry_i,entry_fee=pos
             held=i-entry_i+1
@@ -113,7 +114,9 @@ def run_one(d, name, entry, exit_sig, max_hold):
             fee=fill*qty*fee_rate
             equity-=fee
             pos=(1,qty,fill,i+1,fee)
-        mtm=equity if pos is None else equity+pos[1]*(c[i]-pos[2])
+            opened_this_bar=True
+        mark_price=o[i+1] if opened_this_bar else c[i]
+        mtm=equity if pos is None else equity+pos[1]*(mark_price-pos[2])
         peak=max(peak,mtm); maxdd=min(maxdd,(mtm/peak-1) if peak else 0)
     if pos is not None:
         side,qty,fill,entry_i,entry_fee=pos
@@ -135,6 +138,16 @@ def run_one(d, name, entry, exit_sig, max_hold):
             "median_trade_net_pct":round(float(np.median([t["return_pct"] for t in trades])),4) if trades else None,
             "gross_turnover_usdt":round(gross_turnover,2),"trades_detail":trades}
 
+def buy_hold_benchmark(d):
+    first=float(d.open.iloc[1])*(1+(SPREAD_BPS/2+SLIPPAGE_BPS)/10000)
+    last=float(d.close.iloc[-1])*(1-(SPREAD_BPS/2+SLIPPAGE_BPS)/10000)
+    qty=INITIAL_EQUITY/first
+    entry_fee=first*qty*FEE_BPS/10000
+    exit_fee=last*qty*FEE_BPS/10000
+    final=INITIAL_EQUITY-entry_fee+qty*(last-first)-exit_fee
+    return {"net_return_pct":round((final/INITIAL_EQUITY-1)*100,4),
+            "initial_entry_utc":d.index[1].isoformat(),"final_exit_utc":d.index[-1].isoformat()}
+
 def main():
     out=Path("artifacts/crypto_strategy_sweep"); out.mkdir(parents=True,exist_ok=True)
     all_rows=[]; failures=[]; metadata=[]
@@ -145,7 +158,7 @@ def main():
           metadata.append({"symbol":symbol,"timeframe":tf,"candles":len(d),"start_utc":d.index[0].isoformat(),
                            "end_utc":d.index[-1].isoformat(),"source":d.attrs["source"],
                            "retrieved_at_utc":d.attrs["retrieved_at_utc"],
-                           "missing_intervals":0})
+                           "missing_intervals":0,"buy_and_hold":buy_hold_benchmark(d)})
           for name,(entry,exit_sig) in make_rules(d).items():
             # Fixed holding caps are predeclared, not optimized: 8/24 bars.
             for hold in (8,24):
