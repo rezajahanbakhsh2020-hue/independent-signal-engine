@@ -340,5 +340,5 @@ def fetch_range(
 
     details = "; ".join(errors)
     raise CryptoProvidersUnavailableError(
-        f"All crypto providers failed for {market} {tf}: {details}
+        f"All crypto providers failed for {market} {tf}: {details}"
     ) from last_error
