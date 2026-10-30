@@ -46,6 +46,11 @@ def _page(message: str = "", chart: str = "", *, market: str = "BTCUSDT",
         f'<option value="{html.escape(name)}"{" selected" if name == strategy else ""}>{html.escape(name)}</option>'
         for name in STRATEGY_REGISTRY
     )
+    market_options = ("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "XAUUSD")
+    market_select_options = "".join(
+        f'<option value="{symbol}"{" selected" if symbol == market else ""}>{symbol}</option>'
+        for symbol in market_options
+    )
     timeframe_options = "".join(
         f'<option value="{tf}"{" selected" if tf == timeframe else ""}>{tf}</option>'
         for tf in TIMEFRAMES
@@ -78,7 +83,7 @@ iframe{{display:block;margin-top:14px}}
 <p>دریافت داده، محاسبه سیگنال و نمودار در یک صفحه؛ فقط دو استراتژی فعال. بدون اجرای معامله.</p>
 <form id="signal-form" method="get" action="/">
 <div class="controls">
-<div><label for="market">نماد بازار</label><input id="market" name="market" value="{html.escape(market)}" required placeholder="BTCUSDT یا XAUUSD"></div>
+<div><label for="market">نماد بازار</label><select id="market" name="market">{market_select_options}</select></div>
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
 <div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="{days}"></div>
