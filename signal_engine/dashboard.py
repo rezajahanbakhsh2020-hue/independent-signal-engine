@@ -65,7 +65,9 @@ def _history(market,timeframe,strategy):
     return result
 
 def _poll(market,timeframe,strategy_name,days):
-    now=pd.Timestamp.now(tz="UTC")\n    warmup=pd.Timedelta(TIMEFRAME_DURATION[timeframe])*50\n    df=_market_data(market,timeframe,now-pd.Timedelta(days=days)-warmup,now)
+    now=pd.Timestamp.now(tz="UTC")
+    warmup=pd.Timedelta(TIMEFRAME_DURATION[timeframe])*50
+    df=_market_data(market,timeframe,now-pd.Timedelta(days=days)-warmup,now)
     duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); df=df.loc[(df.index+duration)<=now]
     if df.empty: raise ValueError("داده کندل بسته‌شده برای این نماد و تایم‌فریم دریافت نشد.")
     age_seconds=max(0.0,(now-(df.index[-1]+duration)).total_seconds())
