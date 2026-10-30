@@ -286,6 +286,83 @@ def _mexc(symbol: str, tf: str, start: pd.Timestamp, end: pd.Timestamp,
     return _frame(rows, "MEXC", symbol, contract, tf, start, end)
 
 
+
+def list_symbols(provider: str, timeout_seconds: float = 15.0) -> list[str]:
+    """Return live, provider-specific USDT perpetual contracts as canonical BASEUSDT symbols.
+
+    This is discovery only: the selected provider remains the sole source, and
+    an unavailable discovery endpoint fails closed rather than using a static
+    cross-exchange list or silently substituting BTC.
+    """
+    if provider not in PROVIDERS:
+        raise ValueError(f"provider must be one of {', '.join(PROVIDERS)}")
+    if timeout_seconds <= 0:
+        raise DataValidationError("timeout_seconds must be positive")
+
+    if provider == "Bitget":
+        payload = _json(_url("https://api.bitget.com/api/v2/mix/market/contracts", {
+            "productType": "USDT-FUTURES",
+        }), timeout_seconds)
+        if not isinstance(payload, dict) or payload.get("code") != "00000":
+            raise PerpetualUnavailableError("Bitget contract-list response was invalid")
+        rows = payload.get("data") or []
+        symbols = [
+            str(row.get("symbol", "")).upper()
+            for row in rows if isinstance(row, dict)
+            and row.get("quoteCoin") == "USDT"
+            and row.get("symbolType") == "perpetual"
+            and row.get("symbolStatus") == "normal"
+        ]
+    elif provider == "KuCoin":
+        payload = _json("https://api-futures.kucoin.com/api/v1/contracts/active", timeout_seconds)
+        if not isinstance(payload, dict) or payload.get("code") != "200000":
+            raise PerpetualUnavailableError("KuCoin contract-list response was invalid")
+        rows = payload.get("data") or []
+        symbols = [
+            ("BTC" if str(row.get("baseCurrency", "")).upper() == "XBT"
+             else str(row.get("baseCurrency", "")).upper()) + "USDT"
+            for row in rows if isinstance(row, dict)
+            and row.get("quoteCurrency") == "USDT"
+            and row.get("settleCurrency") == "USDT"
+            and row.get("status") == "Open"
+        ]
+    elif provider == "HTX":
+        payload = _json("https://api.hbdm.com/linear-swap-api/v1/swap_contract_info", timeout_seconds)
+        if not isinstance(payload, dict) or payload.get("status") != "ok":
+            raise PerpetualUnavailableError("HTX contract-list response was invalid")
+        rows = payload.get("data") or []
+        symbols = [
+            str(row.get("contract_code", "")).upper().replace("-", "")
+            for row in rows if isinstance(row, dict)
+            and str(row.get("contract_code", "")).upper().endswith("-USDT")
+            and row.get("contract_status") == 1
+        ]
+    else:
+        payload = _json("https://contract.mexc.com/api/v1/contract/detail", timeout_seconds)
+        if not isinstance(payload, dict) or payload.get("success") is not True:
+            raise PerpetualUnavailableError("MEXC contract-list response was invalid")
+        rows = payload.get("data") or []
+        symbols = [
+            str(row.get("symbol", "")).upper().replace("_", "")
+            for row in rows if isinstance(row, dict)
+            and row.get("quoteCoin") == "USDT"
+            and row.get("settleCoin") == "USDT"
+        ]
+
+    import re
+    valid = sorted({
+        symbol for symbol in symbols
+        if re.fullmatch(r"[A-Z0-9]{2,20}USDT", symbol)
+    })
+    if not valid:
+        raise PerpetualUnavailableError(
+            f"{provider} returned no active USDT perpetual contracts"
+        )
+    # Keep BTC easy to find without making it a fallback or requiring it to exist.
+    return (["BTCUSDT"] if "BTCUSDT" in valid else []) + [
+        symbol for symbol in valid if symbol != "BTCUSDT"
+    ]
+
 _FETCHERS = {"Bitget": _bitget, "KuCoin": _kucoin, "HTX": _htx, "MEXC": _mexc}
 
 
