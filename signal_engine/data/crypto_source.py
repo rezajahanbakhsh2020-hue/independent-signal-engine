@@ -38,7 +38,7 @@ BITGET_GRANULARITIES = {
 }
 MEXC_INTERVALS = {
     "1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
-    "1H": "1h", "4H": "4h", "1D": "1d",
+    "1H": "60m", "4H": "4h", "1D": "1d",
 }
 HTX_PERIODS = {
     "1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min",
@@ -305,6 +305,8 @@ def fetch_range(
     market = validate_crypto_symbol(symbol)
     tf = validate_timeframe(timeframe)
     start, end = _utc(start_utc, "start_utc"), _utc(end_utc, "end_utc")
+    step = DURATIONS[tf]
+    start = pd.Timestamp((int(start.timestamp()) // step) * step, unit="s", tz="UTC")
     if start >= end:
         raise DataValidationError("start_utc must be earlier than end_utc")
     if timeout_seconds <= 0:
