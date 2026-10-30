@@ -147,14 +147,14 @@ class DashboardHandler(BaseHTTPRequestHandler):
             levels = ""
             if label in {"BUY", "SELL"}:
                 levels = (
-                    f"\\nورود: {detail.get('entry')} | حد ضرر: {detail.get('stop')} | "
+                    f"\nورود: {detail.get('entry')} | حد ضرر: {detail.get('stop')} | "
                     f"هدف: {detail.get('target')}"
                 )
             elif reason:
-                levels = f"\\nعلت: {reason}"
+                levels = f"\nعلت: {reason}"
             message = (
                 f"تصمیم فعلی: {label} | نماد: {market} | تایم‌فریم: {timeframe} | "
-                f"استراتژی: {strategy_name}{levels}\\n"
+                f"استراتژی: {strategy_name}{levels}\n"
                 f"منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
             )
             self._send(_page(
