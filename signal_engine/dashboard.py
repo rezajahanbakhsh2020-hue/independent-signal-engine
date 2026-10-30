@@ -77,7 +77,7 @@ button{{background:#197c68;border:0;font-weight:700;cursor:pointer;margin-top:14
 <div><label for="market">نماد بازار</label><input id="market" name="market" value="{html.escape(market)}" required placeholder="BTCUSDT یا XAUUSD"></div>
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
-<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="365" value="{days}"></div>
+<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="{days}"></div>
 </div><button type="submit">دریافت آخرین سیگنال و نمایش نمودار</button>
 </form>
 {f'<div class="panel notice">{html.escape(message)}</div>' if message else ''}
@@ -102,8 +102,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if strategy_name not in STRATEGY_REGISTRY:
                 raise ValueError("استراتژی انتخاب‌شده مجاز نیست.")
             days = int(query.get("days", ["30"])[0])
-            if not 1 <= days <= 365:
-                raise ValueError("بازه داده باید بین ۱ تا ۳۶۵ روز باشد.")
+            if not 1 <= days <= 90:
+                raise ValueError("بازه داده باید بین ۱ تا ۹۰ روز باشد.")
             now = pd.Timestamp.now(tz="UTC")
             end = now
             start = end - pd.Timedelta(days=days)
