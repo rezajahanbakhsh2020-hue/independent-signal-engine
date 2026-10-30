@@ -32,13 +32,13 @@ def _candles(prices: list[float], period="60min", start="2025-06-02") -> pd.Data
     )
 
 
-def _crossover(fast=2, slow=4):
-    return STRATEGY_REGISTRY["crossover"](fast=fast, slow=slow)
+def _rsi(period=14):
+    return STRATEGY_REGISTRY["RSI_Reversal"](period=period)
 
 
 def _report(df, strat=None, risk=None, market="BTCUSDT"):
     return latest_decision_report(
-        df, strat or _crossover(), risk or RiskConfig(), market, "1H", provenance="csv:test"
+        df, strat or _rsi(), risk or RiskConfig(), market, "1H", provenance="csv:test"
     )
 
 
@@ -55,9 +55,9 @@ class FixedDirectionStrategy(Strategy):
         return pd.Series(self._directions, index=df.index, dtype="int64")
 
 
-def test_buy_reachable_after_real_crossover_flip():
+def test_buy_reachable_after_real_rsi_flip():
     df = _candles(list(np.linspace(160, 100, 60)) + list(np.linspace(100, 170, 3)))
-    rep = _report(df, _crossover())
+    rep = _report(df, _RSI_Reversal())
     d = rep["decision"]
     assert d["label"] == "BUY"
     assert d["side"] == 1
@@ -150,7 +150,7 @@ def test_insufficient_candles_fail_closed():
 
 def test_bollinger_raw_semantics_supported():
     df = _candles(list(np.linspace(100.0, 100.0, 60)) + [80.0, 90.0])
-    strat = STRATEGY_REGISTRY["bollinger_mean_reversion"](window=20, num_std=2.0)
+    strat = STRATEGY_REGISTRY["Bollinger_Reversion"](window=20, num_std=2.0)
     risk = RiskConfig(atr_window=5)
     rep = _report(df, strat, risk)
     assert rep["decision"]["label"] in {"BUY", "SELL", "NO TRADE"}
@@ -162,7 +162,7 @@ def test_build_signal_zero_atr_is_single_geometry_authority():
     df.iloc[-1, df.columns.get_loc("open")] = -5.0  # impossible price
     risk = RiskConfig()
     atr_series = pd.Series(0.0, index=df.index)
-    sig = build_signal(1, len(df) - 2, df, risk, atr_series, 10_000.0, "BTCUSDT", "1H", "crossover")
+    sig = build_signal(1, len(df) - 2, df, risk, atr_series, 10_000.0, "BTCUSDT", "1H", "RSI_Reversal")
     assert sig is None
 
 
@@ -191,7 +191,7 @@ def test_cli_signal_on_real_csv_exit_zero(tmp_path, capsys):
         [
             "signal", "--market", "XAUUSD", "--timeframe", "1H",
             "--csv", str(path), "--strategy", "crossover",
-            "--param", "fast=2", "--param", "slow=4", "--max-age-hours", "100000",
+            "--max-age-hours", "100000",
         ]
     )
     payload = json.loads(capsys.readouterr().out)
@@ -272,8 +272,7 @@ def test_chart_crypto_exports_chart_for_non_btc_symbol(monkeypatch, tmp_path, ca
     output = tmp_path / "sol-chart.html"
     rc = cli_main([
         "chart-crypto", "--market", "SOLUSDT", "--timeframe", "1H",
-        "--strategy", "crossover", "--param", "fast=2", "--param", "slow=4",
-        "--out", str(output),
+        "--strategy", "crossover",         "--out", str(output),
     ])
     result = json.loads(capsys.readouterr().out)
     assert rc == 0
