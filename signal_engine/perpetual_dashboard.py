@@ -95,7 +95,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 <div class="chart-help">نشانگر BUY/SELL روی کندل تصمیم نمایش داده می‌شود. خطوط افقی هر سیگنال شامل Entry، Stop Loss و TP1/TP2/TP3 است. همه زمان‌ها UTC هستند. نمودار تمام کندل‌های برگشتی در بازه انتخاب‌شده را دریافت می‌کند؛ محدودیت ۳۰۰ کندل ندارد.</div></section>
 <h2>سیگنال‌های همین نمودار <span class="muted" id="signal-count"></span></h2>
 <section class="panel table-wrap"><table><thead><tr><th>جهت</th><th>زمان تصمیم UTC</th><th>استراتژی</th><th>Entry</th><th>Stop Loss</th><th>TP1</th><th>TP2</th><th>TP3</th></tr></thead><tbody id="signals"><tr><td colspan="8" class="muted">هنوز داده دریافت نشده است.</td></tr></tbody></table></section>
-<p class="status">فقط کندل بسته‌شده؛ داده Perpetual از همان صرافی انتخاب‌شده؛ بدون سفارش‌گذاری. اگر قرارداد یا نماد در صرافی انتخابی موجود نباشد، درخواست با خطا متوقف می‌شود و منبع دیگری جایگزین نمی‌شود. این صفحه قیمت Trade/Contract را نمایش می‌دهد، نه Mark Price یا Index Price.</p>
+<p class="status">فقط کندل بسته‌شده؛ داده Perpetual از همان صرافی انتخاب‌شده؛ بدون سفارش‌گذاری. اگر قرارداد یا نماد در صرافی انتخابی موجود نباشد، درخواست با خطا متوقف می‌شود و منبع دیگری جایگزین نمی‌شود. این صفحه قیمت Trade/Contract را نمایش می‌دهد، نه Mark Price یا Index Price. محاسبه سطوح فعلاً Funding را لحاظ نمی‌کند؛ سطوح، برآورد هندسی ATR و هزینه عمومی موتور هستند.</p>
 <div id="error" class="error" role="alert"></div>
 </main><script>
 (() => {{
@@ -111,7 +111,7 @@ function draw(){{
  ctx.fillStyle="#0b1117";ctx.fillRect(0,0,w,h);
  if(!candleData.length){{ctx.fillStyle="#9aabb7";ctx.fillText("No perpetual candles loaded",20,30);return;}}
  const left=74,right=18,top=18,bottom=34,pw=w-left-right,ph=h-top-bottom;
- let lo=Math.min(...candleData.map(c=>c.low)),hi=Math.max(...candleData.map(c=>c.high));
+ let lo=Infinity,hi=-Infinity;for(const c of candleData){{lo=Math.min(lo,c.low);hi=Math.max(hi,c.high);}}
  for(const s of signalData)for(const v of [s.entry,s.stop,s.tp1,s.tp2,s.tp3])if(Number.isFinite(v)){{lo=Math.min(lo,v);hi=Math.max(hi,v);}}
  const pad=Math.max((hi-lo)*.05,Math.abs(hi)*.0002,1e-9);lo-=pad;hi+=pad;
  const y=p=>top+(hi-p)/(hi-lo)*ph;
