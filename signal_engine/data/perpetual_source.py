@@ -237,7 +237,7 @@ def _htx(symbol: str, tf: str, start: pd.Timestamp, end: pd.Timestamp,
                 rows.append({"timestamp": pd.Timestamp(stamp_s, unit="s", tz="UTC"),
                     "open": float(item["open"]), "high": float(item["high"]),
                     "low": float(item["low"]), "close": float(item["close"]),
-                    "volume": float(item.get("vol", item.get("amount", 0)))})
+                    "volume": float(item.get("amount", item.get("vol", 0)))})
         cursor = page_end
         if cursor < end_s:
             time.sleep(0.06)
