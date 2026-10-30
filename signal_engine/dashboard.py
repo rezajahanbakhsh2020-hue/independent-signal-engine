@@ -32,15 +32,6 @@ TIMEFRAME_DURATION = {
 }
 
 
-def _utc(value: str | None, fallback: pd.Timestamp) -> pd.Timestamp:
-    if not value:
-        return fallback
-    stamp = pd.Timestamp(value)
-    if pd.isna(stamp):
-        raise ValueError("تاریخ واردشده معتبر نیست.")
-    return stamp.tz_localize("UTC") if stamp.tzinfo is None else stamp.tz_convert("UTC")
-
-
 def _market_data(market: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp):
     if market == "XAUUSD":
         from signal_engine.data.biquote_source import fetch_range
@@ -155,7 +146,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             message = (
                 f"تصمیم فعلی: {label} | نماد: {market} | تایم‌فریم: {timeframe} | "
                 f"استراتژی: {strategy_name}{levels}\n"
-                f"منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
+                f"وضعیت داده: {'تازه' if fresh else 'کهنه'} | منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
             )
             self._send(_page(
                 message, chart, market=market, timeframe=timeframe,
