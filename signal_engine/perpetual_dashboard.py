@@ -144,7 +144,8 @@ function render(data){{
  el("last-candle").textContent=new Date(candleData[candleData.length-1].t).toISOString();
  el("freshness").textContent=data.fresh?"FRESH":"STALE";
  el("freshness").className=data.fresh?"green":"gold";
- el("signal-count").textContent="("+signalData.length+")";\n const d=data.signal_diagnostics||{};el("signal-diagnostics").textContent="رویدادهای خام استراتژی: "+(d.strategy_events??"—")+" · رویدادهای دارای کندل اجرای بعدی: "+(d.actionable_events??"—")+" · سیگنال‌های منتظر کندل بعدی: "+(d.pending_events??"—")+" · سیگنال با سطوح ریسک ناموجود: "+(d.risk_levels_unavailable??"—");
+ el("signal-count").textContent="("+signalData.length+")";
+ const d=data.signal_diagnostics||{};el("signal-diagnostics").textContent="رویدادهای خام استراتژی: "+(d.strategy_events??"—")+" · رویدادهای دارای کندل اجرای بعدی: "+(d.actionable_events??"—")+" · سیگنال‌های منتظر کندل بعدی: "+(d.pending_events??"—")+" · سیگنال با سطوح ریسک ناموجود: "+(d.risk_levels_unavailable??"—");
  const tbody=el("signals");tbody.replaceChildren();
  if(!signalData.length){{const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=9;td.textContent="در این بازه رویداد قابل‌اقدام BUY/SELL ثبت نشده است؛ جزئیات در بخش تشخیص سیگنال آمده است.";tr.append(td);tbody.append(tr);}}
  for(const s of signalData.slice().reverse()){{
