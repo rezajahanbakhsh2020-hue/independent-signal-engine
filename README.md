@@ -34,7 +34,7 @@ The dashboard binds only to localhost. It does not expose a public server, reque
 
 - Only completed candles are considered.
 - Stale data, invalid OHLC data, insufficient history and invalid risk geometry fail closed; they do not create fabricated entries, stops or targets.
-- Binance pagination does not mix data hosts. XAUUSD uses a separate provider adapter.
+- Crypto OHLCV failover tries independent public spot providers (Bybit, Gate.io, KuCoin, then Binance). Each provider must independently supply a complete validated range; candles from different exchanges are never mixed. Provider requests use short per-request timeouts to move on quickly when a source is unavailable. XAUUSD remains on its separate BiQuote adapter.
 - BiQuote `tickVolume` is a tick count, not centralized exchange-traded volume.
 - Historical markers are research signals, not executed orders. A valid `NO TRADE` is an acceptable result.
 - No profitability is guaranteed.
