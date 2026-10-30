@@ -117,3 +117,49 @@ def test_existing_dashboard_links_to_separate_perpetual_route():
     existing = _page()
     assert 'href="/perpetual"' in existing
     assert "ورود به صفحه مستقل Perpetual" in existing
+
+
+@pytest.mark.parametrize(
+    ("provider", "payload", "expected"),
+    [
+        ("Bitget", {"code": "00000", "data": [
+            {"symbol": "BTCUSDT", "quoteCoin": "USDT", "symbolType": "perpetual", "symbolStatus": "normal"},
+            {"symbol": "ETHUSDT", "quoteCoin": "USDT", "symbolType": "perpetual", "symbolStatus": "normal"},
+            {"symbol": "SOLUSDT", "quoteCoin": "USDT", "symbolType": "delivery", "symbolStatus": "normal"},
+            {"symbol": "XRPUSDT", "quoteCoin": "USDT", "symbolType": "perpetual", "symbolStatus": "maintain"},
+        ]}, ["BTCUSDT", "ETHUSDT"]),
+        ("KuCoin", {"code": "200000", "data": [
+            {"baseCurrency": "XBT", "quoteCurrency": "USDT", "settleCurrency": "USDT", "status": "Open"},
+            {"baseCurrency": "ETH", "quoteCurrency": "USDT", "settleCurrency": "USDT", "status": "Open"},
+            {"baseCurrency": "SOL", "quoteCurrency": "USDT", "settleCurrency": "USDT", "status": "Done"},
+        ]}, ["BTCUSDT", "ETHUSDT"]),
+        ("HTX", {"status": "ok", "data": [
+            {"contract_code": "BTC-USDT", "contract_status": 1},
+            {"contract_code": "ETH-USDT", "contract_status": 1},
+            {"contract_code": "SOL-USDT", "contract_status": 0},
+            {"contract_code": "XRP-USD", "contract_status": 1},
+        ]}, ["BTCUSDT", "ETHUSDT"]),
+        ("MEXC", {"success": True, "data": [
+            {"symbol": "BTC_USDT", "quoteCoin": "USDT", "settleCoin": "USDT"},
+            {"symbol": "ETH_USDT", "quoteCoin": "USDT", "settleCoin": "USDT"},
+            {"symbol": "SOL_USDC", "quoteCoin": "USDC", "settleCoin": "USDC"},
+        ]}, ["BTCUSDT", "ETHUSDT"]),
+    ],
+)
+def test_live_symbol_discovery_is_provider_specific_and_usdt_perpetual_only(
+    monkeypatch, provider, payload, expected
+):
+    calls = []
+    monkeypatch.setattr(source, "_json", lambda url, timeout: calls.append(url) or payload)
+    assert source.list_symbols(provider) == expected
+    assert len(calls) == 1
+    assert "spot" not in calls[0].lower()
+
+
+def test_symbol_discovery_rejects_unknown_provider_without_network(monkeypatch):
+    def unexpected(*args, **kwargs):
+        raise AssertionError("unknown provider must fail before network access")
+
+    monkeypatch.setattr(source, "_json", unexpected)
+    with pytest.raises(ValueError, match="provider must be one of"):
+        source.list_symbols("Binance")
