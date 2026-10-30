@@ -26,7 +26,7 @@ signal-dashboard
 
 The dashboard opens at `http://127.0.0.1:8765`. If the browser does not open automatically, enter that address manually. Stop the local server with `Ctrl+C`.
 
-Choose the market, timeframe, strategy and data lookback (1–90 days), then press **شروع پایش آنلاین** once. The page polls automatically every 10 seconds while open. It loads the selected historical range once, then uses a one-day rolling range for updates. Signal events are deduplicated and stored locally in `~/.signal-engine/signal-history.sqlite3`; each BUY/SELL appears in its own card, newest first. The current decision remains separate from the historical event feed.
+Choose the market, timeframe, strategy and data lookback (1–90 days), then press **شروع پایش آنلاین** once. The page polls automatically every 10 seconds while open. It loads the selected historical range once, then uses a one-day rolling range for updates. Signal events from both approved strategies are deduplicated and stored locally in `~/.signal-engine/signal-history.sqlite3`; each BUY/SELL appears in its own card with market, timeframe, strategy, signal time, age and candle close price, newest first. The current decision remains separate from the historical event feed.
 
 The dashboard binds only to localhost. It does not expose a public server, request credentials, store secrets, or place orders.
 
