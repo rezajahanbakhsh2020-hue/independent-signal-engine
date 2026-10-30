@@ -149,6 +149,46 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     "label": "NO TRADE",
                     "reason": "stale_data" if age_hours > max_age_hours else "latest_candle_not_closed",
                 }
+
+            # Display the latest actual strategy transition, regardless of age.
+            # This is presentation only and does not alter the current decision.
+            direction = strategy.raw_direction(df)
+            signal_positions = [
+                position for position, value in enumerate(direction.tolist())
+                if int(value) in {-1, 1}
+            ]
+            recent_signal_text = "آخرین سیگنال در داده‌های دریافت‌شده پیدا نشد."
+            if signal_positions:
+                signal_position = signal_positions[-1]
+                signal_side = int(direction.iloc[signal_position])
+                signal_label = "BUY" if signal_side == 1 else "SELL"
+                signal_open = pd.Timestamp(df.index[signal_position])
+                if signal_open.tzinfo is None:
+                    signal_open = signal_open.tz_localize("UTC")
+                signal_closed = signal_open + duration
+                signal_age = max(0, int((now - signal_closed).total_seconds()))
+                signal_local_time = signal_closed.to_pydatetime().astimezone()
+                if not fresh:
+                    signal_status = "تاریخی · داده فعلی کهنه است"
+                elif signal_position == len(df) - 1:
+                    signal_status = "NEW · سیگنال جدید، در انتظار کندل بعدی"
+                elif (
+                    signal_position == len(df) - 2
+                    and decision.get("decision", {}).get("label") == signal_label
+                ):
+                    signal_status = "LIVE · سیگنال در آخرین تصمیم"
+                else:
+                    signal_status = "سیگنال قبلی"
+                if signal_age < 3600:
+                    age_text = f"{signal_age // 60} دقیقه قبل"
+                else:
+                    age_text = f"{signal_age // 3600} ساعت و {(signal_age % 3600) // 60} دقیقه قبل"
+                recent_signal_text = (
+                    f"آخرین سیگنال استراتژی: {signal_label} | وضعیت: {signal_status}\\n"
+                    f"زمان کندل سیگنال (محلی): {signal_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
+                    f"زمان UTC: {signal_closed.isoformat()} | {age_text}"
+                )
+
             chart = build_chart_html(
                 df, market=market, timeframe=timeframe,
                 strategy_name=strategy_name, strategy_params={},
@@ -170,6 +210,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
             message = (
                 f"تصمیم فعلی: {label} | نماد: {market} | تایم‌فریم: {timeframe} | "
                 f"استراتژی: {strategy_name}{levels}\n"
+                f"{recent_signal_text}\\n"
                 f"وضعیت داده: {'تازه' if fresh else 'کهنه'} | منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
             )
             self._send(_page(
