@@ -57,7 +57,7 @@ class FixedDirectionStrategy(Strategy):
 
 def test_buy_reachable_after_real_rsi_flip():
     df = _candles(list(np.linspace(160, 100, 60)) + list(np.linspace(100, 170, 3)))
-    rep = _report(df, _RSI_Reversal())
+    rep = _report(df, _rsi())
     d = rep["decision"]
     assert d["label"] == "BUY"
     assert d["side"] == 1
@@ -69,9 +69,9 @@ def test_buy_reachable_after_real_rsi_flip():
     assert d["reward_risk_per_unit"] == pytest.approx(2.0)
 
 
-def test_sell_reachable_after_real_crossover_flip():
+def test_sell_reachable_after_real_RSI_Reversal_flip():
     df = _candles(list(np.linspace(100, 200, 60)) + list(np.linspace(200, 90, 3)))
-    rep = _report(df, _crossover())
+    rep = _report(df, _rsi())
     d = rep["decision"]
     assert d["label"] == "SELL"
     assert d["side"] == -1
@@ -82,7 +82,7 @@ def test_sell_reachable_after_real_crossover_flip():
 
 
 def test_no_trade_without_active_transition():
-    # Persistent up-trend: the crossover fires once at warm-up end only,
+    # Persistent up-trend: the RSI_Reversal fires once at warm-up end only,
     # far from the end; the penultimate signal candle carries no transition.
     df = _candles(list(np.linspace(100, 160, 40)) + [161.0])
     rep = _report(df)
@@ -98,7 +98,7 @@ def test_flip_on_last_candle_is_pending_only():
     # *future* candle that does not exist yet, so the acted decision is NO
     # TRADE and only the pending direction is reported.
     df = _candles(list(np.linspace(100, 200, 60)) + list(np.linspace(200, 90, 2)))
-    assert LABEL[int(_crossover().raw_direction(df).iloc[-1])] == "SELL"
+    assert LABEL[int(_rsi().raw_direction(df).iloc[-1])] == "SELL"
     rep = _report(df)
     assert rep["pending_raw_direction"] == "SELL"
     assert rep["decision"]["label"] == "NO TRADE"
@@ -133,7 +133,7 @@ def test_risk_geometry_rejection_fail_closed():
     # min_atr above every achievable ATR forces the fail-closed branch:
     # explicit NO TRADE and never fabricated entry/stop/target levels.
     df = _candles(list(np.linspace(100, 200, 60)) + list(np.linspace(200, 90, 3)))
-    rep = _report(df, _crossover(), RiskConfig(atr_window=3, min_atr=1e12))
+    rep = _report(df, _rsi(), RiskConfig(atr_window=3, min_atr=1e12))
     d = rep["decision"]
     assert d["label"] == "NO TRADE"
     assert d["reason"] == "risk_geometry_rejected_zero_or_insufficient_atr"
@@ -173,7 +173,7 @@ def test_read_csv_matches_direct_call(tmp_path):
     path = tmp_path / "x.csv"
     df.reset_index().to_csv(path, index=False)
     loaded, _rep = read_csv_ohlcv(str(path), expected_spacing="1H")
-    strat, risk = _crossover(), RiskConfig()
+    strat, risk = _rsi(), RiskConfig()
     direct = _report(df, strat, risk)
     via_csv = _report(loaded, strat, risk)
     assert json.dumps(via_csv["decision"], sort_keys=True) == json.dumps(
@@ -190,7 +190,7 @@ def test_cli_signal_on_real_csv_exit_zero(tmp_path, capsys):
     rc = cli_main(
         [
             "signal", "--market", "XAUUSD", "--timeframe", "1H",
-            "--csv", str(path), "--strategy", "crossover",
+            "--csv", str(path), "--strategy", "RSI_Reversal",
             "--max-age-hours", "100000",
         ]
     )
@@ -209,7 +209,7 @@ def test_cli_signal_rejects_stale_csv_fail_closed(tmp_path, capsys):
     df.reset_index().to_csv(path, index=False)
     rc = cli_main([
         "signal", "--market", "BTCUSDT", "--timeframe", "1H",
-        "--csv", str(path), "--strategy", "crossover",
+        "--csv", str(path), "--strategy", "RSI_Reversal",
     ])
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
@@ -226,7 +226,7 @@ def test_cli_signal_rejects_unclosed_latest_candle(tmp_path, capsys):
     df.reset_index().to_csv(path, index=False)
     rc = cli_main([
         "signal", "--market", "BTCUSDT", "--timeframe", "1H",
-        "--csv", str(path), "--strategy", "crossover",
+        "--csv", str(path), "--strategy", "RSI_Reversal",
     ])
     payload = json.loads(capsys.readouterr().out)
     assert rc == 0
@@ -237,7 +237,7 @@ def test_cli_signal_rejects_bad_csv_fail_closed(tmp_path, capsys):
     bad = tmp_path / "bad.csv"
     bad.write_text("timestamp,open,high,low,close,volume\nnot-a-time,1,1,1,1,0\n")
     rc = cli_main(
-        ["signal", "--market", "BTCUSDT", "--timeframe", "1H", "--csv", str(bad), "--strategy", "crossover"]
+        ["signal", "--market", "BTCUSDT", "--timeframe", "1H", "--csv", str(bad), "--strategy", "RSI_Reversal"]
     )
     payload = json.loads(capsys.readouterr().out)
     assert rc == 1
@@ -247,7 +247,7 @@ def test_cli_signal_rejects_bad_csv_fail_closed(tmp_path, capsys):
 
 def test_cli_signal_missing_source_fails(tmp_path, capsys):
     with pytest.raises(SystemExit):
-        cli_main(["signal", "--market", "BTCUSDT", "--timeframe", "1H", "--strategy", "crossover"])
+        cli_main(["signal", "--market", "BTCUSDT", "--timeframe", "1H", "--strategy", "RSI_Reversal"])
 
 
 def test_chart_crypto_exports_chart_for_non_btc_symbol(monkeypatch, tmp_path, capsys):
@@ -272,7 +272,7 @@ def test_chart_crypto_exports_chart_for_non_btc_symbol(monkeypatch, tmp_path, ca
     output = tmp_path / "sol-chart.html"
     rc = cli_main([
         "chart-crypto", "--market", "SOLUSDT", "--timeframe", "1H",
-        "--strategy", "crossover",         "--out", str(output),
+        "--strategy", "RSI_Reversal",         "--out", str(output),
     ])
     result = json.loads(capsys.readouterr().out)
     assert rc == 0
