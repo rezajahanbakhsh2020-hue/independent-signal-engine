@@ -42,3 +42,7 @@ The dashboard binds only to localhost. It does not expose a public server, reque
 ## Scope
 
 The dashboard is the simple, primary user workflow. Existing research modules and their CLI commands remain separate optional developer functionality; they are not part of the dashboard flow. The automated 16-combination strategy comparison, Ichimoku strategy/backtests, Ichimoku confirmation grids and their dedicated workflows are excluded. No strategy beyond the two listed above is authorized.
+
+## Validation status
+
+The unified dashboard change has been reviewed statically only. Tests, backtests, simulations and live-market verification were intentionally not run under the current repository-owner instruction.
