@@ -16,7 +16,7 @@ from signal_engine.latest_signal import latest_decision_report
 from signal_engine.risk import RiskConfig
 from signal_engine.strategies import STRATEGY_REGISTRY
 from signal_engine.strategies.base import transition_direction
-from signal_engine.data.perpetual_source import PROVIDERS, fetch_range
+from signal_engine.data.perpetual_source import PROVIDERS, fetch_range, list_symbols
 
 TIMEFRAME_DURATION = {
     "1m": timedelta(minutes=1), "5m": timedelta(minutes=5),
@@ -31,7 +31,7 @@ def _page() -> str:
     provider_options = "".join(
         f'<option value="{html.escape(p)}">{html.escape(p)}</option>' for p in PROVIDERS
     )
-    market_options = '<input id="symbol" name="symbol" value="BTCUSDT" placeholder="مثلاً BTCUSDT" pattern="[A-Za-z0-9]{{2,20}}USDT" required>'
+    market_options = '<select id="symbol" name="symbol" required disabled><option value="">در حال دریافت نمادهای قرارداد...</option></select>'
     timeframe_options = "".join(
         f'<option value="{tf}"{" selected" if tf == "1m" else ""}>{tf}</option>'
         for tf in TIMEFRAMES
@@ -71,7 +71,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 <p class="intro">صفحه مستقل قراردادهای دائمی USDT؛ انتخاب صرافی اجباری است و هیچ داده‌ای از Spot یا صرافی دیگر جایگزین نمی‌شود.</p>
 <form id="controls" class="panel"><div class="controls">
 <div><label for="provider">منبع دقیق داده</label><select id="provider" name="provider">{provider_options}</select></div>
-<div><label for="symbol">نماد پایه بازار (USDT)</label>{market_options}</div>
+<div><label for="symbol">نماد قرارداد Perpetual (USDT)</label>{market_options}</div>
 <div><label for="timeframe">تایم‌فریم مستقل</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
 <div><label for="days">تاریخچه کندل‌ها (روز، حداکثر ۳۰)</label><input id="days" name="days" type="number" min="1" max="30" value="30"></div>
