@@ -75,6 +75,26 @@ def test_success_path_provenance(monkeypatch):
     assert df.attrs["coverage_start_utc"] is not None
 
 
+def test_arbitrary_usdt_pair_is_supported(monkeypatch):
+    now_ms = 1600000000000
+    klines = [
+        [now_ms + i * 3600000, "10.0", "11.0", "9.0", "10.5", "100.0",
+         now_ms + i * 3600000 + 3599999, "0", 1, "1", "0", "0"]
+        for i in range(5)
+    ]
+    seen = []
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req.full_url)
+        return make_fake_urlopen(json.dumps(klines).encode())(req, timeout)
+
+    monkeypatch.setattr("signal_engine.data.binance_source.urllib.request.urlopen", fake_urlopen)
+    df = fetch_range("SOLUSDT", "1H", pd.Timestamp("2020-09-13T12:00", tz="UTC"),
+                     pd.Timestamp("2020-09-13T17:00", tz="UTC"))
+    assert df.attrs["symbol_mapping"] == "SOLUSDT->SOLUSDT"
+    assert "symbol=SOLUSDT" in seen[0]
+
+
 def test_geo_blocked_primary_uses_official_mirror(monkeypatch):
     now_ms = 1600000000000
     klines = [
@@ -192,3 +212,32 @@ def test_paging_when_more_than_one_page(monkeypatch):
                      pd.Timestamp("2020-09-13T12:00", tz="UTC") + pd.Timedelta(hours=1005))
     df.index = pd.DatetimeIndex(df.index)
     assert len(df) == (1000 - 1) + 3 or df.index.is_unique
+
+
+
+def test_fetch_range_enforces_half_open_utc_range(monkeypatch):
+    start = pd.Timestamp("2020-09-13T12:00:00Z")
+    end = pd.Timestamp("2020-09-13T15:00:00Z")
+    base_ms = int(start.timestamp() * 1000)
+    klines = [
+        [base_ms + i * 3600000, "10", "11", "9", "10.5", "100",
+         base_ms + (i + 1) * 3600000 - 1, "0", 1, "1", "0", "0"]
+        for i in range(5)
+    ]
+    monkeypatch.setattr(
+        "signal_engine.data.binance_source.urllib.request.urlopen",
+        make_fake_urlopen(json.dumps(klines).encode()),
+    )
+    df = fetch_range("SOLUSDT", "1H", start, end)
+    assert list(df.index) == list(pd.date_range(start, periods=3, freq="1h"))
+
+
+def test_fetch_range_rejects_invalid_time_bounds(monkeypatch):
+    start = pd.Timestamp("2024-01-02T00:00:00Z")
+    end = pd.Timestamp("2024-01-01T00:00:00Z")
+    monkeypatch.setattr(
+        "signal_engine.data.binance_source.urllib.request.urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must reject before network")),
+    )
+    with pytest.raises(DataValidationError, match="earlier"):
+        fetch_range("SOLUSDT", "1H", start, end)

@@ -7,6 +7,8 @@ rather than coerced.
 
 from __future__ import annotations
 
+import re
+
 MARKETS = ("XAUUSD", "BTCUSDT", "ETHUSDT")
 
 TIMEFRAMES = ("1m", "5m", "15m", "30m", "1H", "4H", "1D")
@@ -49,12 +51,21 @@ class UnsupportedMarketError(ValueError):
 
 
 def validate_market(market: str) -> str:
+    """Validate a canonical market or a Binance USDT spot symbol.
+
+    The fixed 21-cell research matrix still uses MARKETS only. Interactive
+    crypto commands may use any syntactically valid USDT symbol, e.g. SOLUSDT.
+    Binance remains the source of truth for whether that pair actually exists.
+    """
     m = str(market).strip().upper()
-    if m not in MARKETS:
-        raise UnsupportedMarketError(
-            f"Unsupported market {market!r}; supported markets: {', '.join(MARKETS)}"
-        )
-    return m
+    if m in MARKETS:
+        return m
+    if re.fullmatch(r"[A-Z0-9]{2,20}USDT", m):
+        return m
+    raise UnsupportedMarketError(
+        f"Unsupported market {market!r}; use one of {', '.join(MARKETS)} "
+        "or a Binance USDT spot symbol such as SOLUSDT"
+    )
 
 
 def validate_timeframe(timeframe: str) -> str:
@@ -69,3 +80,27 @@ def validate_timeframe(timeframe: str) -> str:
 def market_timeframe_matrix() -> list[tuple[str, str]]:
     """All 21 canonical (market, timeframe) combinations, in fixed order."""
     return [(m, tf) for m in MARKETS for tf in TIMEFRAMES]
+
+
+
+def validate_crypto_symbol(symbol: str) -> str:
+    """Accept any syntactically valid USDT-quoted Binance spot symbol.
+
+    Binance remains the authority on whether the symbol actually exists and
+    is tradable; unknown symbols fail at the provider request, never via
+    substitution to BTCUSDT/ETHUSDT.
+    """
+    value = str(symbol).strip().upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,20}USDT", value) or value == "XAUUSD":
+        raise UnsupportedMarketError(
+            f"Invalid USDT crypto symbol {symbol!r}; expected a Binance-style pair such as SOLUSDT or ADAUSDT"
+        )
+    return value
+
+
+def validate_market_or_crypto_symbol(market: str) -> str:
+    """Preserve canonical markets while allowing any USDT crypto symbol."""
+    value = str(market).strip().upper()
+    if value in MARKETS:
+        return value
+    return validate_crypto_symbol(value)

@@ -2,9 +2,8 @@
 
 All functions accept a Datetime-indexed OHLCV frame and return series
 aligned to the input index (values at index i use data up to and
-including candle i).  They are pure and deterministic.
+including candle i). They are pure and deterministic.
 """
-
 from __future__ import annotations
 
 import pandas as pd
@@ -60,3 +59,23 @@ def bollinger(
     upper = mid + num_std * std
     lower = mid - num_std * std
     return upper, mid, lower
+
+
+def rsi_wilder(close: pd.Series, period: int = 14) -> pd.Series:
+    """Wilder RSI using the original engine's alpha=1/period smoothing."""
+    if period < 2:
+        raise ValueError("period must be >= 2")
+    delta = close.diff()
+    gains = delta.clip(lower=0)
+    losses = -delta.clip(upper=0)
+    average_gain = gains.ewm(
+        alpha=1 / period, adjust=False, min_periods=period
+    ).mean()
+    average_loss = losses.ewm(
+        alpha=1 / period, adjust=False, min_periods=period
+    ).mean()
+    relative_strength = average_gain / average_loss.where(average_loss != 0)
+    result = 100.0 - (100.0 / (1.0 + relative_strength))
+    result = result.mask((average_loss == 0) & (average_gain > 0), 100.0)
+    result = result.mask((average_loss == 0) & (average_gain == 0), 50.0)
+    return result

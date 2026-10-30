@@ -1,4 +1,4 @@
-"""Public Binance market-data adapter (BTCUSDT / ETHUSDT only).
+"""Public Binance market-data adapter for Binance USDT spot symbols.
 
 Uses the public REST endpoint `api.binance.com` via stdlib urllib so no
 extra dependency is required and no credentials exist anywhere.
@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from signal_engine.constants import BINANCE_SYMBOLS, TIMEFRAME_TO_BINANCE
+from signal_engine.constants import BINANCE_SYMBOLS, TIMEFRAME_TO_BINANCE, validate_crypto_symbol
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
 BASE_URLS = (
@@ -80,11 +80,10 @@ def fetch_klines(
     timeout_seconds: int = 30,
 ) -> list[list]:
     """Fetch one page of klines. Raises BinanceUnavailableError on failure."""
-    if symbol not in BINANCE_SYMBOLS:
-        raise DataValidationError(
-            f"Symbol {symbol!r} not supported by the Binance adapter; "
-            f"supported: {', '.join(BINANCE_SYMBOLS)}"
-        )
+    try:
+        symbol = validate_crypto_symbol(symbol)
+    except ValueError as exc:
+        raise DataValidationError(str(exc)) from exc
     if interval not in TIMEFRAME_TO_BINANCE.values():
         raise DataValidationError(f"Unsupported interval {interval!r}")
     payload, _host = _fetch_klines_with_host(
@@ -102,11 +101,27 @@ def fetch_range(
     max_requests: int = 250,
 ) -> pd.DataFrame:
     """Fetch a full [start, end) range by paging, without inventing candles."""
-    from signal_engine.constants import validate_market, validate_timeframe
+    from signal_engine.constants import validate_timeframe
 
-    market = validate_market(symbol)
+    try:
+        market = validate_crypto_symbol(symbol)
+    except ValueError as exc:
+        raise DataValidationError(str(exc)) from exc
     tf = validate_timeframe(timeframe)
-    symbol = BINANCE_SYMBOLS[market]
+
+    def as_utc(value: pd.Timestamp, label: str) -> pd.Timestamp:
+        stamp = pd.Timestamp(value)
+        if pd.isna(stamp):
+            raise DataValidationError(f"{label} must be a valid timestamp")
+        if stamp.tzinfo is None:
+            return stamp.tz_localize("UTC")
+        return stamp.tz_convert("UTC")
+
+    start_utc = as_utc(start_utc, "start_utc")
+    end_utc = as_utc(end_utc, "end_utc")
+    if start_utc >= end_utc:
+        raise DataValidationError("start_utc must be earlier than end_utc")
+    symbol = BINANCE_SYMBOLS.get(market, market)
     interval = TIMEFRAME_TO_BINANCE[tf]
     start_ms = int(start_utc.timestamp() * 1000)
     end_ms = int(end_utc.timestamp() * 1000)
@@ -154,6 +169,14 @@ def fetch_range(
             }
         )
     raw = pd.DataFrame(records)
+    if not raw.empty:
+        raw = raw.loc[
+            (raw["timestamp"] >= start_utc) & (raw["timestamp"] < end_utc)
+        ].reset_index(drop=True)
+    if raw.empty:
+        raise BinanceUnavailableError(
+            f"No klines within requested UTC range for {market} {tf}"
+        )
     df, _rep = validate_ohlcv(raw, strict_gap_policy=True)
 
     retrieval_time = datetime.now(timezone.utc).isoformat()
