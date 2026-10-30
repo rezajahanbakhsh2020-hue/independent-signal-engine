@@ -36,7 +36,7 @@ def test_chart_html_contains_market_timeframe_and_decision():
         },
         index=idx,
     )
-    strategy = STRATEGY_REGISTRY["crossover"](fast=3, slow=8)
+    strategy = STRATEGY_REGISTRY["Bollinger_Reversion"](window=20, num_std=2.0)
     report = {
         "decision": {"label": "BUY", "entry": float(close[-1])},
         "pending_raw_direction": "NO TRADE",
@@ -45,8 +45,8 @@ def test_chart_html_contains_market_timeframe_and_decision():
         df,
         market="SOLUSDT",
         timeframe="1H",
-        strategy_name="crossover",
-        strategy_params={"fast": 3, "slow": 8},
+        strategy_name="Bollinger_Reversion",
+        strategy_params={"window": 20, "num_std": 2.0},
         strategy=strategy,
         latest_decision=report,
     )
@@ -86,7 +86,7 @@ def test_chart_crypto_cli_fetches_selected_symbol_and_writes_html(monkeypatch, t
         start=idx[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
         end=idx[-1].strftime("%Y-%m-%dT%H:%M:%SZ"),
         max_age_hours=None, max_candles=300, out=str(out),
-        strategy="crossover", param=["fast=3", "slow=8"],
+        strategy="RSI_Reversal", param=["period=14"],
         atr_window=14, atr_multiplier=2.0, reward_risk=2.0,
         risk_fraction=0.01, fee_bps=2.0, spread_bps=2.0,
         slippage_bps=1.0, initial_equity=10000.0,
