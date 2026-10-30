@@ -16,6 +16,7 @@ from signal_engine.strategies.base import transition_direction
 
 TIMEFRAME_DURATION = {"1m":timedelta(minutes=1),"5m":timedelta(minutes=5),"15m":timedelta(minutes=15),"30m":timedelta(minutes=30),"1H":timedelta(hours=1),"4H":timedelta(hours=4),"1D":timedelta(days=1)}
 POLL_SECONDS = 10
+CRYPTO_LOOKBACK_CANDLES = 300
 DB_PATH = Path.home() / ".signal-engine" / "signal-history.sqlite3"
 
 def _database():
@@ -68,9 +69,14 @@ def _history(market,timeframe):
 
 def _poll(market,timeframe,strategy_name,days):
     now=pd.Timestamp.now(tz="UTC")
-    warmup=pd.Timedelta(TIMEFRAME_DURATION[timeframe])*50
-    df=_market_data(market,timeframe,now-pd.Timedelta(days=days)-warmup,now)
-    duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); df=df.loc[(df.index+duration)<=now]
+    duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe])
+    if market=="XAUUSD":
+        start=now-pd.Timedelta(days=days)-duration*50
+    else:
+        # Crypto uses a bounded 300-candle window, including indicator warm-up.
+        start=now-duration*CRYPTO_LOOKBACK_CANDLES
+    df=_market_data(market,timeframe,start,now)
+    df=df.loc[(df.index+duration)<=now]
     if df.empty: raise ValueError("داده کندل بسته‌شده برای این نماد و تایم‌فریم دریافت نشد.")
     age_seconds=max(0.0,(now-(df.index[-1]+duration)).total_seconds())
     fresh=age_seconds<=duration.total_seconds()*3
@@ -116,7 +122,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 <div><label for="market">نماد بازار</label><select id="market" name="market">{markets}</select></div>
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframes}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategies}</select></div>
-<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="30"></div></div>
+<div><label for="days">بازه داده (روز؛ فقط طلا)</label><input id="days" name="days" type="number" min="1" max="90" value="30"></div></div>
 <div class="actions"><button id="toggle" type="submit">شروع پایش آنلاین</button></div>
 <div class="statusline" style="margin-top:13px"><span id="dot" class="dot"></span><span id="run-status">پایش هنوز شروع نشده است.</span><span id="last-update"></span></div></form>
 <section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="last-signal">آخرین سیگنال معتبر پس از دریافت داده نمایش داده می‌شود.</div><div class="meta" id="data-meta"></div></section>
@@ -126,6 +132,9 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 </main><script>
 (() => {{
  const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),lastSignal=document.getElementById("last-signal"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
+ const marketSelect=document.getElementById("market"),daysInput=document.getElementById("days");
+ function syncLookbackControl(){{const gold=marketSelect.value==="XAUUSD";daysInput.disabled=!gold;daysInput.title=gold?"بازه زمانی دریافت طلا":"برای کریپتو پنجره ثابت ۳۰۰ کندل بسته استفاده می‌شود.";}}
+ syncLookbackControl();marketSelect.addEventListener("change",syncLookbackControl);
  let active=false,timer=null,busy=false,initialLoaded=false,lastConfig="",requestController=null;
  const sideClass=s=>s==="BUY"?"buy":s==="SELL"?"sell":"no-trade";
  function renderCards(items) {{
