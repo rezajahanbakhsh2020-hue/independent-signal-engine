@@ -328,6 +328,7 @@ def fetch_range(
     )
     errors: list[str] = []
     last_error: Exception | None = None
+    started = time.monotonic()
 
     # A poll performs one bounded pass. Each provider gets its own wall-clock
     # budget, including all pagination requests, before failover continues.
@@ -337,6 +338,7 @@ def fetch_range(
             frame = fetch(market, tf, start, end, timeout_seconds, deadline)
             frame.attrs["provider_attempts"] = total_attempts
             frame.attrs["provider_failures"] = tuple(errors)
+            frame.attrs["fetch_elapsed_seconds"] = round(time.monotonic() - started, 3)
             return frame
         except Exception as exc:
             last_error = exc
