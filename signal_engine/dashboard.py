@@ -351,6 +351,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path=="/perpetual":
             from signal_engine.perpetual_dashboard import _page as perpetual_page
             self._send(perpetual_page());return
+        if parsed.path=="/api/perpetual/symbols":
+            from signal_engine.perpetual_dashboard import api_symbols
+            try:self._send_json(api_symbols(parse_qs(parsed.query)))
+            except Exception as exc:self._send_json({"error":str(exc)},status=400)
+            return
         if parsed.path=="/api/perpetual/poll":
             from signal_engine.perpetual_dashboard import api_poll
             try:self._send_json(api_poll(parse_qs(parsed.query)))
