@@ -89,7 +89,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 </section>
 <h2>نمودار کندلی Perpetual و سطوح سیگنال</h2>
 <section class="panel"><canvas id="chart" aria-label="Perpetual candlestick chart"></canvas>
-<div class="chart-help">نشانگر BUY/SELL روی کندل تصمیم نمایش داده می‌شود. خطوط افقی هر سیگنال شامل Entry، Stop Loss و TP1/TP2/TP3 است. همه زمان‌ها UTC هستند. نمودار فقط پنج کندل بسته‌شده اخیرِ تایم‌فریم انتخابی را نمایش می‌دهد. محاسبات استراتژی و تاریخچه کامل سیگنال‌ها حفظ می‌شوند؛ خطوط سطوح فقط برای سیگنال آنلاین جاری نمایش داده می‌شوند.</div></section>
+<div class="chart-help">نشانگر BUY/SELL روی کندل تصمیم نمایش داده می‌شود. خطوط افقی هر سیگنال شامل Entry، Stop Loss و TP1/TP2/TP3 است. همه زمان‌ها UTC هستند. نمودار فقط پنج کندل بسته‌شده اخیرِ تایم‌فریم انتخابی و جدول فقط پنج سیگنال اخیر را نمایش می‌دهد. خطوط سطوح فقط برای سیگنال آنلاین جاری نمایش داده می‌شوند.</div></section>
 <h2>سیگنال‌های همین نمودار <span class="muted" id="signal-count"></span></h2>
 <section class="panel table-wrap"><table><thead><tr><th>جهت</th><th>زمان تصمیم UTC</th><th>استراتژی</th><th>Entry</th><th>Stop Loss</th><th>TP1</th><th>TP2</th><th>TP3</th><th>وضعیت سطوح ریسک</th></tr></thead><tbody id="signals"><tr><td colspan="9" class="muted">هنوز داده دریافت نشده است.</td></tr></tbody></table></section>
 <p class="status">فقط کندل بسته‌شده؛ داده Perpetual از همان صرافی انتخاب‌شده؛ بدون سفارش‌گذاری. اگر قرارداد یا نماد در صرافی انتخابی موجود نباشد، درخواست با خطا متوقف می‌شود و منبع دیگری جایگزین نمی‌شود. این صفحه قیمت Trade/Contract را نمایش می‌دهد، نه Mark Price یا Index Price. محاسبه سطوح فعلاً Funding را لحاظ نمی‌کند؛ سطوح، برآورد هندسی ATR و هزینه عمومی موتور هستند.</p>
@@ -150,7 +150,7 @@ function render(data){{
  const d=data.signal_diagnostics||{};el("signal-diagnostics").textContent="رویدادهای خام استراتژی: "+(d.strategy_events??"—")+" · رویدادهای دارای کندل اجرای بعدی: "+(d.actionable_events??"—")+" · سیگنال‌های منتظر کندل بعدی: "+(d.pending_events??"—")+" · سیگنال با سطوح ریسک ناموجود: "+(d.risk_levels_unavailable??"—");
  const tbody=el("signals");tbody.replaceChildren();
  if(!signalData.length){{const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=9;td.textContent="در این بازه رویداد قابل‌اقدام BUY/SELL ثبت نشده است؛ جزئیات در بخش تشخیص سیگنال آمده است.";tr.append(td);tbody.append(tr);}}
- for(const s of signalData.slice().reverse()){{
+ for(const s of signalData.slice(-5).reverse()){{
   const tr=document.createElement("tr"),values=[s.side,new Date(s.t).toISOString(),s.strategy,fmt(s.entry),fmt(s.stop),fmt(s.tp1),fmt(s.tp2),fmt(s.tp3),s.risk_status==="AVAILABLE"?"سطوح آماده":"سطوح ریسک ناموجود"];
   values.forEach((v,i)=>{{const td=document.createElement("td");td.textContent=v;if(i===0)td.className=s.side==="BUY"?"buy":"sell";tr.append(td);}});tbody.append(tr);
  }}
