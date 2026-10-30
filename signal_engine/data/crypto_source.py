@@ -1,7 +1,7 @@
-"""Fail-closed public crypto OHLCV adapter using Bitget only.
+"""Fail-closed public crypto OHLCV adapter with bounded provider failover.
 
-KuCoin, HTX, and MEXC adapters remain available but inactive during the
-single-provider validation phase. No credentials or trading endpoints are used.
+Bitget is preferred; KuCoin, HTX, and MEXC are fallback public spot sources.
+No credentials or trading endpoints are used.
 """
 from __future__ import annotations
 
@@ -302,7 +302,7 @@ def fetch_range(
     end_utc: pd.Timestamp,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> pd.DataFrame:
-    """Fetch the requested closed-candle range from Bitget only; never mix sources."""
+    """Fetch from the first provider returning valid candles; never mix sources."""
     market = validate_crypto_symbol(symbol)
     tf = validate_timeframe(timeframe)
     start, end = _utc(start_utc, "start_utc"), _utc(end_utc, "end_utc")
@@ -313,19 +313,25 @@ def fetch_range(
     if timeout_seconds <= 0:
         raise DataValidationError("timeout_seconds must be positive")
 
-    providers = (("Bitget", _bitget),)
+    providers = (
+        ("Bitget", _bitget),
+        ("KuCoin", _kucoin),
+        ("HTX", _htx),
+        ("MEXC", _mexc),
+    )
     errors: list[str] = []
     last_error: Exception | None = None
     started = time.monotonic()
 
-    # A poll performs one bounded Bitget pass. Its wall-clock budget covers
-    # all pagination requests; no alternate provider is silently substituted.
+    # Providers are attempted sequentially. Each provider has its own bounded
+    # wall-clock budget; a successful result comes from exactly one source.
     for total_attempts, (name, fetch) in enumerate(providers, start=1):
         deadline = time.monotonic() + PROVIDER_BUDGET_SECONDS
         try:
             frame = fetch(market, tf, start, end, timeout_seconds, deadline)
             frame.attrs["provider_attempts"] = total_attempts
             frame.attrs["provider_failures"] = tuple(errors)
+            frame.attrs["provider_failover"] = total_attempts > 1
             frame.attrs["fetch_elapsed_seconds"] = round(time.monotonic() - started, 3)
             return frame
         except Exception as exc:
@@ -334,5 +340,5 @@ def fetch_range(
 
     details = "; ".join(errors)
     raise CryptoProvidersUnavailableError(
-        f"Bitget failed for {market} {tf}: {details}"
+        f"All crypto providers failed for {market} {tf}: {details}"
     ) from last_error
