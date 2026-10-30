@@ -99,7 +99,7 @@ main{{width:min(1180px,100%);margin:auto;padding:22px 16px 60px}}h1{{font-size:2
 .panel{{background:linear-gradient(145deg,#172833,#121e27);border:1px solid var(--line);border-radius:18px;padding:16px;margin:14px 0;box-shadow:0 10px 28px #0003}}
 .controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}}label{{display:block;color:#b9c8d1;font-size:13px;margin-bottom:6px}}
 select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid #3a505d;background:#0c171e;color:var(--text);font:inherit}}
-.actions{{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:14px}}button{{background:#137b68;border:0;font-weight:750;cursor:pointer}}button.secondary{{width:auto;padding-inline:18px;background:#273a46}}
+.actions{{display:grid;grid-template-columns:1fr;gap:10px;margin-top:14px}}button{{background:#137b68;border:0;font-weight:750;cursor:pointer}}
 .statusline{{display:flex;align-items:center;gap:9px;flex-wrap:wrap;color:var(--muted);font-size:13px}}.dot{{width:9px;height:9px;border-radius:50%;background:#71818b}}.dot.on{{background:var(--green);box-shadow:0 0 12px #21c58e99}}
 .current{{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}}.big{{font-size:32px;font-weight:900;line-height:1.15}}.buy{{color:var(--green)}}.sell{{color:var(--red)}}.no-trade{{color:var(--gold)}}
 .meta{{font-size:12px;color:var(--muted);line-height:1.8;margin-top:8px}}.section-title{{font-size:18px;margin:22px 2px 10px}}
@@ -107,7 +107,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 .event:hover{{transform:translateY(-2px);border-color:#526d7b}}.event.old{{opacity:.72}}.event .side{{font-size:29px;font-weight:950}}.event .time{{font-size:12px;color:#aab9c2;margin-top:8px;line-height:1.7}}.event .price{{font-size:13px;color:#d4dfe5;margin-top:5px}}
 #events:empty:after{{content:"هنوز سیگنالی در این بازه ثبت نشده است.";display:block;color:var(--muted);padding:18px}}#chart-frame{{width:100%;height:690px;border:0;border-radius:14px;background:#0b1117}}
 .error{{color:#ff8999;white-space:pre-wrap}}.fresh{{color:var(--green)}}.stale{{color:var(--gold)}}
-@media(max-width:560px){{main{{padding:16px 11px 40px}}.big{{font-size:29px}}#chart-frame{{height:520px}}.actions{{grid-template-columns:1fr}}button.secondary{{width:100%}}}}
+@media(max-width:560px){{main{{padding:16px 11px 40px}}.big{{font-size:29px}}#chart-frame{{height:520px}}.actions{{grid-template-columns:1fr}}}}
 </style></head><body><main>
 <h1>داشبورد آنلاین سیگنال</h1><p class="intro">پایش خودکار بازار، تصمیم فعلی و آرشیو کارت‌های BUY / SELL؛ فقط دو استراتژی مجاز و بدون اجرای معامله.</p>
 <form id="signal-form" class="panel"><div class="controls">
@@ -115,7 +115,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframes}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategies}</select></div>
 <div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="30"></div></div>
-<div class="actions"><button id="toggle" type="submit">شروع پایش آنلاین</button><button id="refresh" class="secondary" type="button">بررسی فوری</button></div>
+<div class="actions"><button id="toggle" type="submit">شروع پایش آنلاین</button></div>
 <div class="statusline" style="margin-top:13px"><span id="dot" class="dot"></span><span id="run-status">پایش هنوز شروع نشده است.</span><span id="last-update"></span></div></form>
 <section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="data-meta"></div></section>
 <h2 class="section-title">تاریخچه سیگنال‌ها <span class="muted" id="event-count"></span></h2><div id="events" class="cards"></div>
@@ -123,7 +123,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 <p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. تاریخچه روی همین دستگاه ذخیره می‌شود. داده کهنه سیگنال معتبر جدید تولید نمی‌کند. نشانگرهای تاریخی سفارش واقعی نیستند.</p><div id="error" class="error" role="alert"></div>
 </main><script>
 (() => {{
- const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),refresh=document.getElementById("refresh"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
+ const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
  let active=false,timer=null,busy=false,initialLoaded=false,lastConfig="";
  const sideClass=s=>s==="BUY"?"buy":s==="SELL"?"sell":"no-trade";
  function renderCards(items) {{
@@ -157,7 +157,6 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
  function start() {{if(active)return;active=true;dot.classList.add("on");toggle.textContent="توقف پایش";status.textContent="در حال اتصال به منبع بازار...";poll();timer=setInterval(poll,10000);}}
  function stop() {{active=false;if(timer)clearInterval(timer);timer=null;dot.classList.remove("on");toggle.textContent="شروع پایش آنلاین";status.textContent="پایش متوقف شد.";}}
  form.addEventListener("submit",e=>{{e.preventDefault();if(active)stop();else start();}});
- refresh.addEventListener("click",()=>{{if(!active)start();else poll();}});
  for(const el of form.querySelectorAll("select,input"))el.addEventListener("change",()=>{{if(active){{error.textContent="";poll();}}}});
 }})();
 </script></body></html>"""
