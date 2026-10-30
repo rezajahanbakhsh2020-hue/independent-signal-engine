@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import html
-import json
 import webbrowser
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -51,7 +50,7 @@ def _market_data(market: str, timeframe: str, start: pd.Timestamp, end: pd.Times
 
 
 def _page(message: str = "", chart: str = "", *, market: str = "BTCUSDT",
-          timeframe: str = "1H", strategy: str = "Bollinger_Reversion") -> str:
+          timeframe: str = "1H", strategy: str = "Bollinger_Reversion", days: int = 30) -> str:
     strategy_options = "".join(
         f'<option value="{html.escape(name)}"{" selected" if name == strategy else ""}>{html.escape(name)}</option>'
         for name in STRATEGY_REGISTRY
@@ -87,7 +86,7 @@ button{{background:#197c68;border:0;font-weight:700;cursor:pointer;margin-top:14
 <div><label for="market">نماد بازار</label><input id="market" name="market" value="{html.escape(market)}" required placeholder="BTCUSDT یا XAUUSD"></div>
 <div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
-<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="365" value="30"></div>
+<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="365" value="{days}"></div>
 </div><button type="submit">دریافت آخرین سیگنال و نمایش نمودار</button>
 </form>
 {f'<div class="panel notice">{html.escape(message)}</div>' if message else ''}
