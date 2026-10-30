@@ -119,14 +119,14 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
 <div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="30"></div></div>
 <div class="actions"><button id="toggle" type="submit">شروع پایش آنلاین</button></div>
 <div class="statusline" style="margin-top:13px"><span id="dot" class="dot"></span><span id="run-status">پایش هنوز شروع نشده است.</span><span id="last-update"></span></div></form>
-<section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="data-meta"></div></section>
+<section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="last-signal">آخرین سیگنال معتبر پس از دریافت داده نمایش داده می‌شود.</div><div class="meta" id="data-meta"></div></section>
 <h2 class="section-title">تاریخچه سیگنال‌ها <span class="muted" id="event-count"></span></h2><div id="events" class="cards"></div>
 <h2 class="section-title">نمودار کندلی و نشانگرهای استراتژی</h2><section class="panel"><iframe id="chart-frame" title="نمودار کندلی"></iframe></section>
 <p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. تاریخچه روی همین دستگاه ذخیره می‌شود. داده کهنه سیگنال معتبر جدید تولید نمی‌کند. نشانگرهای تاریخی سفارش واقعی نیستند.</p><div id="error" class="error" role="alert"></div>
 </main><script>
 (() => {{
- const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
- let active=false,timer=null,busy=false,initialLoaded=false,lastConfig="";
+ const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),lastSignal=document.getElementById("last-signal"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
+ let active=false,timer=null,busy=false,initialLoaded=false,lastConfig="",requestController=null;
  const sideClass=s=>s==="BUY"?"buy":s==="SELL"?"sell":"no-trade";
  function renderCards(items) {{
   events.replaceChildren();document.getElementById("event-count").textContent="("+items.length+")";
@@ -141,24 +141,30 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
  }}
  async function poll() {{
   if(busy||!active)return;busy=true;error.textContent="";
+  const controller=new AbortController();requestController=controller;
+  const requestTimeout=setTimeout(()=>controller.abort(),125000);
   try {{
    const q=new URLSearchParams(new FormData(form));
    const key=[q.get("market"),q.get("timeframe"),q.get("strategy"),q.get("days")].join("|");
    if(key!==lastConfig){{initialLoaded=false;lastConfig=key;}}
    if(initialLoaded)q.set("days","1");
-   const response=await fetch("/api/poll?"+q,{{cache:"no-store"}});
+   const response=await fetch("/api/poll?"+q,{{cache:"no-store",signal:controller.signal}});
    const data=await response.json();if(!response.ok)throw new Error(data.error||"دریافت داده ناموفق بود.");
    decision.textContent=data.decision_label;decision.className="big "+sideClass(data.decision_label);
    meta.textContent=data.market+" · "+data.timeframe+" · "+data.strategy+(data.decision.reason?" · علت: "+data.decision.reason:"");
+   if(data.latest_signal){{const age=Math.max(0,data.latest_signal.age_seconds||0);const ageText=age<3600?Math.floor(age/60)+" دقیقه قبل":Math.floor(age/3600)+" ساعت و "+Math.floor((age%3600)/60)+" دقیقه قبل";lastSignal.textContent="آخرین سیگنال این استراتژی: "+data.latest_signal.side+" · "+new Date(data.latest_signal.signal_time_utc).toLocaleString()+" · "+ageText;}}else{{lastSignal.textContent="در بازهٔ دریافت‌شده سیگنال تاریخی BUY یا SELL برای این استراتژی پیدا نشد.";}}
    dataMeta.textContent=(data.fresh?"داده تازه":"داده کهنه")+" · "+data.provider+" · "+data.source+" · "+data.closed_candles+" کندل بسته · تلاش ارائه‌دهندگان: "+data.provider_attempts+" · دریافت: "+data.retrieval_time_utc+(data.provider_failures.length?" · مسیرهای ناموفق: "+data.provider_failures.join(" / "):"");
    initialLoaded=true;renderCards(data.history||[]);if(data.chart)frame.srcdoc=data.chart;
    lastUpdate.textContent="آخرین بررسی: "+new Date(data.polled_at_utc).toLocaleTimeString();
    status.textContent="پایش فعال · بررسی خودکار هر 10 ثانیه";status.className=data.fresh?"fresh":"stale";
-  }} catch(e) {{error.textContent="خطا در دریافت داده: "+e.message;status.textContent="پایش فعال است؛ تلاش بعدی خودکار انجام می‌شود.";}}
-  finally {{busy=false;}}
+  }} catch(e) {{
+   if(e.name==="AbortError"){{if(active){{error.textContent="مهلت دریافت داده پس از ۱۲۵ ثانیه تمام شد؛ درخواست بعدی دوباره تلاش می‌کند.";status.textContent="دریافت داده به مهلت زمانی رسید.";}}}}
+   else{{error.textContent="خطا در دریافت داده: "+e.message;status.textContent="پایش فعال است؛ تلاش بعدی خودکار انجام می‌شود.";}}
+  }}
+  finally {{clearTimeout(requestTimeout);if(requestController===controller)requestController=null;busy=false;}}
  }}
  function start() {{if(active)return;active=true;dot.classList.add("on");toggle.textContent="توقف پایش";status.textContent="در حال اتصال به منبع بازار...";poll();timer=setInterval(poll,10000);}}
- function stop() {{active=false;if(timer)clearInterval(timer);timer=null;dot.classList.remove("on");toggle.textContent="شروع پایش آنلاین";status.textContent="پایش متوقف شد.";}}
+ function stop() {{active=false;if(timer)clearInterval(timer);timer=null;if(requestController)requestController.abort();dot.classList.remove("on");toggle.textContent="شروع پایش آنلاین";status.textContent="پایش متوقف شد.";}}
  form.addEventListener("submit",e=>{{e.preventDefault();if(active)stop();else start();}});
  for(const el of form.querySelectorAll("select,input"))el.addEventListener("change",()=>{{if(active){{error.textContent="";poll();}}}});
 }})();
