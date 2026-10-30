@@ -31,7 +31,7 @@ def _page() -> str:
     provider_options = "".join(
         f'<option value="{html.escape(p)}">{html.escape(p)}</option>' for p in PROVIDERS
     )
-    market_options = '<input id="symbol" name="symbol" value="BTCUSDT" placeholder="مثلاً BTCUSDT" pattern="[A-Za-z0-9]{2,20}USDT" required>'
+    market_options = '<input id="symbol" name="symbol" value="BTCUSDT" placeholder="مثلاً BTCUSDT" pattern="[A-Za-z0-9]{{2,20}}USDT" required>'
     timeframe_options = "".join(
         f'<option value="{tf}"{" selected" if tf == "1m" else ""}>{tf}</option>'
         for tf in TIMEFRAMES
