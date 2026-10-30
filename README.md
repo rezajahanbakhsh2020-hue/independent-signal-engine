@@ -1,67 +1,44 @@
 # Independent Signal Engine
 
-A standalone Python 3.11+ multi-market signal engine. The active strategy allow-list contains **only two selected strategies**:
+A small, single-purpose market signal application. Install it once, start one local dashboard, choose a market, timeframe and one of the **two fixed strategies**, then see the latest decision and candlestick chart on the same page.
 
-1. **`Bollinger_Reversion`** — BUY when price crosses back above the lower Bollinger band; SELL when it crosses back below the upper band. Original defaults: period 20, 2.0 standard deviations.
-2. **`RSI_Reversal`** — Wilder RSI(14); BUY when RSI crosses upward through 30; SELL when RSI crosses downward through 70. These original settings are fixed.
+## Active strategies — exactly two
 
-No other strategy is registered or selectable through the CLI.
+- `Bollinger_Reversion`: original Bollinger re-entry rules, period 20 and 2.0 standard deviations.
+- `RSI_Reversal`: original Wilder RSI(14) rules, BUY above 30 after an oversold reading and SELL below 70 after an overbought reading.
 
-## Markets and timeframes
+No other strategy is registered, selectable, or added by the dashboard. Strategy logic and parameters are not user-configurable.
 
-- Gold: `XAUUSD` through the public BiQuote OHLC adapter.
-- Crypto: any syntactically valid Binance USDT spot pair (for example `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, `ADAUSDT`). Binance is authoritative for actual symbol availability; invalid or delisted pairs fail clearly and are never silently substituted.
+## Supported markets and timeframes
+
+- Gold: `XAUUSD`, using the independent public BiQuote OHLC adapter.
+- Crypto: valid Binance USDT spot pairs such as `BTCUSDT`, `ETHUSDT`, `SOLUSDT`, and `ADAUSDT`. Binance confirms whether a pair actually exists; symbols are never silently substituted.
 - Timeframes: `1m`, `5m`, `15m`, `30m`, `1H`, `4H`, `1D`.
 
-## Install
+## Start the application
+
+Python 3.11 or newer is required.
 
 ```bash
 python -m pip install -e .
+signal-dashboard
 ```
 
-## Fetch crypto candles
+The dashboard opens at `http://127.0.0.1:8765`. If the browser does not open automatically, enter that address manually. Stop the local server with `Ctrl+C`.
 
-```bash
-signal-engine fetch-crypto --market SOLUSDT --timeframe 15m \
-  --start 2026-01-01T00:00 --end 2026-01-02T00:00 --out data/SOLUSDT_15m.csv
-```
+Choose the market, timeframe, strategy and data lookback in the page, then press **دریافت آخرین سیگنال و نمایش نمودار**. The latest BUY / SELL / NO TRADE decision, the chart, historical signal markers and source/freshness details are shown together.
 
-The adapter uses official public Binance endpoints, respects pagination limits, validates OHLCV data, records provenance, and refuses to mix providers during a paginated request.
+The dashboard binds only to localhost. It does not expose a public server, request credentials, store secrets, or place orders.
 
-## Produce a current signal from a CSV
+## Data and signal safeguards
 
-```bash
-signal-engine signal --market SOLUSDT --timeframe 15m \
-  --csv data/SOLUSDT_15m.csv --strategy RSI_Reversal
-```
+- Only completed candles are considered.
+- Stale data, invalid OHLC data, insufficient history and invalid risk geometry fail closed; they do not create fabricated entries, stops or targets.
+- Binance pagination does not mix data hosts. XAUUSD uses a separate provider adapter.
+- BiQuote `tickVolume` is a tick count, not centralized exchange-traded volume.
+- Historical markers are research signals, not executed orders. A valid `NO TRADE` is an acceptable result.
+- No profitability is guaranteed.
 
-For Bollinger:
+## Scope
 
-```bash
-signal-engine signal --market SOLUSDT --timeframe 15m \
-  --csv data/SOLUSDT_15m.csv --strategy Bollinger_Reversion \
-  --param window=20 --param num_std=2.0
-```
-
-## Fetch and chart crypto in one command
-
-```bash
-signal-engine chart-crypto --market SOLUSDT --timeframe 15m \
-  --strategy Bollinger_Reversion --param window=20 --param num_std=2.0 \
-  --out charts/SOLUSDT_15m.html
-```
-
-The standalone HTML chart contains candlesticks, historical BUY/SELL markers, the latest decision, and data/decision details. Markers are placed at the next candle open where a decision would be acted on; they are not live orders.
-
-## Data integrity and freshness
-
-- CSV and fetched candles are validated; malformed OHLCV data is rejected with an audit report.
-- Current-signal and chart paths exclude unfinished candles and reject stale data.
-- Data source, retrieval time, symbol, timeframe, and coverage are recorded where available.
-- A valid `NO TRADE` is reported honestly. No entry, stop, or target is fabricated when the evidence or risk geometry is insufficient.
-
-## Scope boundaries
-
-This repository is a signal/research tool, not an order-execution system. It does not guarantee profitability.
-
-The automated 16-combination crypto comparison, Ichimoku strategy/backtests, Ichimoku confirmation grids, and their dedicated GitHub Actions workflows are excluded. No backtest or test suite was run as part of this PR correction.
+The dashboard is the simple, primary user workflow. Existing research modules and their CLI commands remain separate optional developer functionality; they are not part of the dashboard flow. The automated 16-combination strategy comparison, Ichimoku strategy/backtests, Ichimoku confirmation grids and their dedicated workflows are excluded. No strategy beyond the two listed above is authorized.
