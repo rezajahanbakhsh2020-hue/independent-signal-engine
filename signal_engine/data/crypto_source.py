@@ -1,12 +1,12 @@
-"""Fail-closed public crypto OHLCV provider rotation.
+"""Fail-closed public crypto OHLCV provider failover.
 
-Provider priority is explicit and deterministic, with continuous rotation:
-Bitget -> KuCoin -> HTX -> MEXC -> Bitget ...
+Provider priority is explicit and deterministic: Bitget -> KuCoin -> HTX ->
+MEXC. Each provider is attempted once per poll and receives a bounded elapsed
+time budget, including all pagination requests.
 
 Each provider independently supplies its own usable OHLCV response. Partial
 history, gaps, and deduplicated timestamps are tolerated; data from providers
-is never mixed. Every HTTP request uses the same bounded timeout; no credentials
-or trading endpoints are used.
+is never mixed. No credentials or trading endpoints are used.
 """
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 MAX_REQUESTS = 300
+PROVIDER_BUDGET_SECONDS = 30.0
 LIMIT = 1000
 
 DURATIONS = {
@@ -71,6 +72,14 @@ def _get_json(url: str, timeout: float) -> object:
 
 def _query(base: str, params: dict) -> str:
     return base + "?" + urllib.parse.urlencode(params)
+
+
+def _bounded_timeout(timeout: float, deadline: float) -> float:
+    """Return a request timeout that cannot exceed the provider budget."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("provider time budget exhausted")
+    return min(timeout, remaining)
 
 
 def _validated_frame(
@@ -130,7 +139,8 @@ def _validated_frame(
 
 
 def _kucoin(
-    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp, timeout: float
+    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp,
+    timeout: float, deadline: float
 ) -> pd.DataFrame:
     interval = KUCOIN_INTERVALS[timeframe]
     step = DURATIONS[timeframe]
@@ -149,7 +159,7 @@ def _kucoin(
             "startAt": cursor,
             "endAt": page_end,
         })
-        payload = _get_json(query, timeout)
+        payload = _get_json(query, _bounded_timeout(timeout, deadline))
         if not isinstance(payload, dict) or payload.get("code") != "200000":
             raise RuntimeError(f"unexpected KuCoin response: {str(payload)[:220]}")
         batch = payload.get("data") or []
@@ -174,7 +184,8 @@ def _kucoin(
 
 
 def _bitget(
-    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp, timeout: float
+    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp,
+    timeout: float, deadline: float
 ) -> pd.DataFrame:
     granularity = BITGET_GRANULARITIES[timeframe]
     step = DURATIONS[timeframe]
@@ -194,7 +205,7 @@ def _bitget(
             "endTime": page_end,
             "limit": LIMIT,
         })
-        payload = _get_json(query, timeout)
+        payload = _get_json(query, _bounded_timeout(timeout, deadline))
         if not isinstance(payload, dict) or payload.get("code") != "00000":
             raise RuntimeError(f"unexpected Bitget response: {str(payload)[:220]}")
         batch = payload.get("data") or []
@@ -218,7 +229,8 @@ def _bitget(
 
 
 def _htx(
-    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp, timeout: float
+    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp,
+    timeout: float, deadline: float
 ) -> pd.DataFrame:
     # HTX history/kline exposes only the most recent N bars and has no
     # start/end pagination. Completeness validation rejects lookbacks beyond
@@ -228,7 +240,7 @@ def _htx(
         "period": HTX_PERIODS[timeframe],
         "size": 2000,
     })
-    payload = _get_json(query, timeout)
+    payload = _get_json(query, _bounded_timeout(timeout, deadline))
     if not isinstance(payload, dict) or payload.get("status") != "ok":
         raise RuntimeError(f"unexpected HTX response: {str(payload)[:220]}")
     batch = payload.get("data") or []
@@ -249,7 +261,8 @@ def _htx(
 
 
 def _mexc(
-    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp, timeout: float
+    symbol: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp,
+    timeout: float, deadline: float
 ) -> pd.DataFrame:
     interval = MEXC_INTERVALS[timeframe]
     step = DURATIONS[timeframe]
@@ -269,7 +282,7 @@ def _mexc(
             "endTime": page_end,
             "limit": LIMIT,
         })
-        payload = _get_json(query, timeout)
+        payload = _get_json(query, _bounded_timeout(timeout, deadline))
         if not isinstance(payload, list):
             raise RuntimeError(f"unexpected MEXC response: {str(payload)[:220]}")
         for item in payload:
@@ -296,7 +309,7 @@ def fetch_range(
     end_utc: pd.Timestamp,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> pd.DataFrame:
-    """Fetch a complete range from the first available provider; never mix."""
+    """Fetch usable OHLCV from the first available provider; never mix sources."""
     market = validate_crypto_symbol(symbol)
     tf = validate_timeframe(timeframe)
     start, end = _utc(start_utc, "start_utc"), _utc(end_utc, "end_utc")
@@ -308,27 +321,30 @@ def fetch_range(
         raise DataValidationError("timeout_seconds must be positive")
 
     providers = (
-        ("Bitget", lambda: _bitget(market, tf, start, end, timeout_seconds)),
-        ("KuCoin", lambda: _kucoin(market, tf, start, end, timeout_seconds)),
-        ("HTX", lambda: _htx(market, tf, start, end, timeout_seconds)),
-        ("MEXC", lambda: _mexc(market, tf, start, end, timeout_seconds)),
+        ("Bitget", _bitget),
+        ("KuCoin", _kucoin),
+        ("HTX", _htx),
+        ("MEXC", _mexc),
     )
     errors: list[str] = []
-    total_attempts = 0
-    while True:
-        # Rotate through the complete provider list until one source returns
-        # usable data: KuCoin -> Bitget -> HTX -> MEXC -> KuCoin ...
-        for name, fetch in providers:
-            total_attempts += 1
-            try:
-                frame = fetch()
-                frame.attrs["provider_attempts"] = total_attempts
-                frame.attrs["provider_failures"] = tuple(errors[-4:])
-                return frame
-            except Exception as exc:
-                errors.append(f"{name}: {type(exc).__name__}: {exc}")
-                # Bound diagnostic memory while preserving the latest cycle.
-                if len(errors) > 4:
-                    errors.pop(0)
-        # All four sources failed in this pass. Start another full rotation.
-        time.sleep(1.0)
+    last_error: Exception | None = None
+    started = time.monotonic()
+
+    # A poll performs one bounded pass. Each provider gets its own wall-clock
+    # budget, including all pagination requests, before failover continues.
+    for total_attempts, (name, fetch) in enumerate(providers, start=1):
+        deadline = time.monotonic() + PROVIDER_BUDGET_SECONDS
+        try:
+            frame = fetch(market, tf, start, end, timeout_seconds, deadline)
+            frame.attrs["provider_attempts"] = total_attempts
+            frame.attrs["provider_failures"] = tuple(errors)
+            frame.attrs["fetch_elapsed_seconds"] = round(time.monotonic() - started, 3)
+            return frame
+        except Exception as exc:
+            last_error = exc
+            errors.append(f"{name}: {type(exc).__name__}: {exc}")
+
+    details = "; ".join(errors)
+    raise CryptoProvidersUnavailableError(
+        f"All crypto providers failed for {market} {tf}: {details}"
+    ) from last_error
