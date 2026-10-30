@@ -23,8 +23,16 @@ import pandas as pd
 from signal_engine.constants import BINANCE_SYMBOLS, TIMEFRAME_TO_BINANCE, validate_crypto_symbol
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
+# Binance documents these equivalent Spot REST base endpoints. Try the
+# primary and GCP routes, then the regional api1-api4 hosts; the market-data-
+# only host remains the final fallback. Never substitute another data vendor.
 BASE_URLS = (
     "https://api.binance.com/api/v3/klines",
+    "https://api-gcp.binance.com/api/v3/klines",
+    "https://api1.binance.com/api/v3/klines",
+    "https://api2.binance.com/api/v3/klines",
+    "https://api3.binance.com/api/v3/klines",
+    "https://api4.binance.com/api/v3/klines",
     "https://data-api.binance.vision/api/v3/klines",
 )
 MAX_LIMIT = 1000  # provider limit per request

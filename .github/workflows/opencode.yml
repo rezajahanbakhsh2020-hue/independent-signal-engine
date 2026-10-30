@@ -124,46 +124,30 @@ jobs:
           agent: build
           use_github_token: true
           prompt: |
-            Work on issue #${{ github.event.issue.number }}.
-            Do not edit the issue text or comments.
-            Work only in this repository.
+            Work only in this repository and preserve the existing code.
+            The product requirement is a small, unified signal application.
 
-            REQUIRED CHECKPOINT:
-            cc1dab38d9d725e8635f7e1fca3478fcbc509d94
+            HARD PRODUCT BOUNDARIES:
+            - Exactly two selectable strategies: Bollinger_Reversion and RSI_Reversal.
+            - Do not add, enable, compare, register, or expose any other strategy.
+            - Do not change either strategy's logic or original parameters.
+            - Keep XAUUSD on its separate BiQuote adapter and crypto on Binance USDT spot pairs.
+            - The primary user experience is one simple local dashboard showing market,
+              timeframe, selected strategy, latest BUY/SELL/NO TRADE decision and chart
+              together. Avoid extra services, databases, credentials, order execution,
+              complex configuration, and unnecessary abstractions.
+            - Preserve closed-candle, freshness, OHLCV validation and fail-closed risk rules.
+            - Do not execute tests, backtests, simulations, market scans or live trades.
+            - Do not fabricate data, signal outcomes, test results or completion claims.
+            - Never commit directly to main, force-push, rewrite history or merge.
+            - Do not create duplicate pull requests.
 
-            REQUIRED EXISTING BRANCH:
-            opencode/issue1-20261029091040
-
-            Inspect the verified resume branch and its commits against main.
-            Preserve useful existing work and continue implementation.
-            Do not silently restart from main, discard prior work, or
-            create a duplicate PR. If the action cannot safely reuse
-            existing work, report the exact blocker.
-
-            Never reset, force-push, rewrite history, commit directly to
-            main, or merge automatically. Do not modify Issue #1.
-
-            Build the independent Python 3.11+ signal engine for
-            XAUUSD, BTCUSDT, and ETHUSDT across:
-            1m, 5m, 15m, 30m, 1H, 4H, 1D.
-
-            Preserve modular data validation, strategies, risk controls,
-            deterministic backtesting, walk-forward evaluation, untouched
-            holdout, randomized statistical baseline, and reproducible
-            reporting. Prevent lookahead, leakage, fabricated market
-            data, and impossible fills. Support BUY, SELL, and NO TRADE.
-            Never promise profitability.
-
-            Preserve existing tests. Run targeted tests and the full
-            relevant test suite. Review all changes for regressions,
-            secrets, accidental deletions, and unrelated files.
-
-            Do not invent test results or claim a push or PR unless
-            remote state confirms it. Report exact commit, branch,
-            changed files, commands and results, evaluated combinations,
-            evidence level, blockers, and status:
-            COMPLETE, COMPLETE_OFFLINE, PARTIAL, or BLOCKED.
-
+            Inspect the current branch and existing changes before any edit. Continue only
+            the minimal dashboard and usability work required by the product boundaries.
+            Do not broaden the research scope or revive superseded issue requirements.
+            Report exact branch, commit, changed files, static inspection performed and
+            remaining blockers. State explicitly that no tests/backtests were run.
+            
       - name: Publish OpenCode commit to the resume branch
         if: success()
         shell: bash
@@ -202,25 +186,6 @@ jobs:
           git push origin "$LOCAL_SHA:refs/heads/${RESUME_BRANCH}"
           echo "Published commit $LOCAL_SHA to $RESUME_BRANCH"
 
-      - name: Create pull request
+      - name: Keep PR creation disabled while validation is paused
         if: success()
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RESUME_BRANCH: opencode/issue1-20261029091040
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main "$RESUME_BRANCH"
-          ahead="$(git rev-list --count "origin/main..origin/$RESUME_BRANCH")"
-          if [[ "$ahead" == "0" ]]; then
-            echo "Resume branch has no changes beyond main; no PR is needed."
-            exit 0
-          fi
-
-          if gh pr view "$RESUME_BRANCH" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "A pull request already exists for $RESUME_BRANCH."
-          elif ! gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$RESUME_BRANCH" \
-              --title "Complete independent multi-market signal engine" \
-              --body "Automated implementation from Issue #1. Review the diff and CI results before merging. No automatic merge is performed."; then
-            echo "::warning::The branch was published, but GitHub blocked PR creation with GITHUB_TOKEN. The repository setting 'Allow GitHub Actions to create and approve pull requests' must be enabled, or a PR must be opened through the GitHub integration."
-          fi
+        run: echo "No PR created: repository owner has prohibited test/backtest execution, and opening a PR would trigger the test workflow."
