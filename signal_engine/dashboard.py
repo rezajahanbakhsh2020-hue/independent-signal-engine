@@ -1,265 +1,197 @@
-""""Small local dashboard for one-step market signal viewing.
-
-The dashboard is deliberately local-only: it fetches public candles, computes
-one of the two registered strategies, and renders the existing standalone
-candlestick chart. It never places orders or stores credentials.
-"""
+"""Local live signal dashboard with a persistent, deduplicated event feed."""
 from __future__ import annotations
-
-import argparse
-import html
-import webbrowser
+import argparse, html, json, sqlite3, webbrowser
 from datetime import timedelta
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
-
 import pandas as pd
-
 from signal_engine.chart import build_chart_html
 from signal_engine.constants import TIMEFRAMES, validate_market_or_crypto_symbol, validate_timeframe
 from signal_engine.latest_signal import latest_decision_report
 from signal_engine.risk import RiskConfig
 from signal_engine.strategies import STRATEGY_REGISTRY
+from signal_engine.strategies.base import transition_direction
 
-TIMEFRAME_DURATION = {
-    "1m": timedelta(minutes=1),
-    "5m": timedelta(minutes=5),
-    "15m": timedelta(minutes=15),
-    "30m": timedelta(minutes=30),
-    "1H": timedelta(hours=1),
-    "4H": timedelta(hours=4),
-    "1D": timedelta(days=1),
-}
+TIMEFRAME_DURATION = {"1m":timedelta(minutes=1),"5m":timedelta(minutes=5),"15m":timedelta(minutes=15),"30m":timedelta(minutes=30),"1H":timedelta(hours=1),"4H":timedelta(hours=4),"1D":timedelta(days=1)}
+POLL_SECONDS = 10
+HISTORY_LIMIT = 200
+DB_PATH = Path.home() / ".signal-engine" / "signal-history.sqlite3"
 
+def _database():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db=sqlite3.connect(DB_PATH,timeout=5)
+    db.execute("""CREATE TABLE IF NOT EXISTS signal_events (
+      event_key TEXT PRIMARY KEY, market TEXT NOT NULL, timeframe TEXT NOT NULL,
+      strategy TEXT NOT NULL, side TEXT NOT NULL CHECK(side IN ('BUY','SELL')),
+      signal_time_utc TEXT NOT NULL, candle_open_utc TEXT NOT NULL,
+      close_price REAL NOT NULL, recorded_at_utc TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_signal_events_scope_time ON signal_events(market,timeframe,strategy,signal_time_utc DESC)")
+    return db
 
-def _market_data(market: str, timeframe: str, start: pd.Timestamp, end: pd.Timestamp):
-    if market == "XAUUSD":
+def _market_data(market,timeframe,start,end):
+    if market=="XAUUSD":
         from signal_engine.data.biquote_source import fetch_range
-        return fetch_range(market, timeframe, start, end)
-    from signal_engine.data.binance_source import fetch_range
-    return fetch_range(market, timeframe, start, end)
+    else:
+        from signal_engine.data.crypto_source import fetch_range
+    return fetch_range(market,timeframe,start,end)
 
+def _record_events(df,strategy,market,timeframe):
+    duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); now=pd.Timestamp.now(tz="UTC").isoformat()
+    transitions=transition_direction(strategy.raw_direction(df)); records=[]
+    for stamp,side in transitions.items():
+        if int(side) not in {-1,1}: continue
+        candle_open=pd.Timestamp(stamp); signal_time=candle_open+duration
+        key="|".join((market,timeframe,strategy.name,str(int(side)),signal_time.isoformat()))
+        records.append((key,market,timeframe,strategy.name,"BUY" if int(side)>0 else "SELL",signal_time.isoformat(),candle_open.isoformat(),float(df.loc[stamp,"close"]),now))
+    if records:
+        with _database() as db:
+            db.executemany("""INSERT OR IGNORE INTO signal_events
+            (event_key,market,timeframe,strategy,side,signal_time_utc,candle_open_utc,close_price,recorded_at_utc)
+            VALUES (?,?,?,?,?,?,?,?,?)""",records)
 
-def _page(message: str = "", chart: str = "", *, market: str = "BTCUSDT",
-          timeframe: str = "1H", strategy: str = "Bollinger_Reversion", days: int = 30) -> str:
-    strategy_options = "".join(
-        f'<option value="{html.escape(name)}"{" selected" if name == strategy else ""}>{html.escape(name)}</option>'
-        for name in STRATEGY_REGISTRY
-    )
-    market_options = ("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "XAUUSD")
-    market_select_options = "".join(
-        f'<option value="{symbol}"{" selected" if symbol == market else ""}>{symbol}</option>'
-        for symbol in market_options
-    )
-    timeframe_options = "".join(
-        f'<option value="{tf}"{" selected" if tf == timeframe else ""}>{tf}</option>'
-        for tf in TIMEFRAMES
-    )
-    safe_chart = html.escape(chart, quote=True)
-    frame = (
-        f'<iframe title="نمودار و سیگنال" srcdoc="{safe_chart}" '
-        'style="width:100%;height:760px;border:0;border-radius:12px;background:#0b1117"></iframe>'
-        if chart else ""
-    )
-    return f"""<!doctype html>
-<html lang="fa" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>داشبورد سیگنال</title>
+def _history(market,timeframe,strategy):
+    with _database() as db:
+        rows=db.execute("""SELECT side,signal_time_utc,close_price,recorded_at_utc FROM signal_events
+        WHERE market=? AND timeframe=? AND strategy=? ORDER BY signal_time_utc DESC LIMIT ?""",
+        (market,timeframe,strategy,HISTORY_LIMIT)).fetchall()
+    now=pd.Timestamp.now(tz="UTC"); result=[]
+    for side,signal_time,price,recorded_at in rows:
+        stamp=pd.Timestamp(signal_time); age=max(0,int((now-stamp).total_seconds()))
+        age_text=f"{age//60} دقیقه قبل" if age<3600 else f"{age//3600} ساعت و {(age%3600)//60} دقیقه قبل"
+        result.append({"side":side,"signal_time_utc":stamp.isoformat(),"signal_time_local":stamp.to_pydatetime().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),"age_seconds":age,"age_text":age_text,"close_price":price,"recorded_at_utc":recorded_at})
+    return result
+
+def _poll(market,timeframe,strategy_name,days):
+    now=pd.Timestamp.now(tz="UTC"); df=_market_data(market,timeframe,now-pd.Timedelta(days=days),now)
+    duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); df=df.loc[(df.index+duration)<=now]
+    if df.empty: raise ValueError("داده کندل بسته‌شده برای این نماد و تایم‌فریم دریافت نشد.")
+    age_seconds=max(0.0,(now-(df.index[-1]+duration)).total_seconds())
+    fresh=age_seconds<=duration.total_seconds()*3
+    strategy=STRATEGY_REGISTRY[strategy_name]()
+    decision=latest_decision_report(df,strategy,RiskConfig(),market,timeframe,provenance=str(df.attrs.get("source","public market data")))
+    if not fresh: decision["decision"]={"label":"NO TRADE","reason":"stale_data"}
+    _record_events(df,strategy,market,timeframe)
+    detail=decision.get("decision",{}); label=detail.get("label","NO TRADE")
+    transitions=transition_direction(strategy.raw_direction(df))
+    positions=[i for i,value in enumerate(transitions.tolist()) if int(value) in {-1,1}]
+    latest=None
+    if positions:
+        pos=positions[-1]; stamp=pd.Timestamp(df.index[pos])+duration
+        latest={"side":"BUY" if int(transitions.iloc[pos])>0 else "SELL","signal_time_utc":stamp.isoformat(),"signal_time_local":stamp.to_pydatetime().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z"),"age_seconds":max(0,int((now-stamp).total_seconds()))}
+    chart=build_chart_html(df,market=market,timeframe=timeframe,strategy_name=strategy_name,strategy_params={},strategy=strategy,latest_decision=decision)
+    return {"market":market,"timeframe":timeframe,"strategy":strategy_name,"decision":detail,"decision_label":label,"fresh":fresh,"data_age_seconds":int(age_seconds),"source":df.attrs.get("source","public market data"),"provider":df.attrs.get("provider","BiQuote" if market=="XAUUSD" else "unknown"),"provider_attempts":df.attrs.get("provider_attempts",1),"provider_failures":list(df.attrs.get("provider_failures",())),"retrieval_time_utc":df.attrs.get("retrieval_time_utc",""),"closed_candles":len(df),"latest_closed_candle_utc":df.index[-1].isoformat(),"latest_signal":latest,"history":_history(market,timeframe,strategy_name),"chart":chart,"polled_at_utc":now.isoformat()}
+
+def _page():
+    market_options=("BTCUSDT","ETHUSDT","BNBUSDT","SOLUSDT","XRPUSDT","ADAUSDT","DOGEUSDT","XAUUSD")
+    markets="".join(f'<option value="{s}"{" selected" if s=="XAUUSD" else ""}>{s}</option>' for s in market_options)
+    timeframes="".join(f'<option value="{tf}"{" selected" if tf=="1m" else ""}>{tf}</option>' for tf in TIMEFRAMES)
+    strategies="".join(f'<option value="{html.escape(name)}">{html.escape(name)}</option>' for name in STRATEGY_REGISTRY)
+    return f"""<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>داشبورد آنلاین سیگنال</title>
 <style>
-*{{box-sizing:border-box}}body{{margin:0;background:#101820;color:#edf2f6;font:15px system-ui,sans-serif}}
-main{{max-width:1100px;margin:24px auto;padding:0 16px}}h1{{font-size:23px;margin:0 0 8px}}
-p,.muted{{color:#aebbc5}}form,.panel{{background:#192630;border:1px solid #34434e;border-radius:12px;padding:16px;margin:14px 0}}
-.controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}}
-label{{display:block;color:#bdc9d1;font-size:13px;margin-bottom:6px}}
-input,select,button{{width:100%;padding:11px;border-radius:8px;border:1px solid #52616c;background:#101820;color:#edf2f6;font:inherit}}
-button{{background:#197c68;border:0;font-weight:700;cursor:pointer;margin-top:14px}}
-button:disabled{{opacity:.65;cursor:wait}}
-.notice{{color:#f2c66d;white-space:pre-wrap}}
-.loading{{display:none;color:#f2c66d;background:#26313a;border-radius:8px;padding:12px;margin:12px 0}}
-.loading.visible{{display:block}}
-iframe{{display:block;margin-top:14px}}
+:root{{color-scheme:dark;--bg:#0b1218;--line:#263946;--muted:#9aabb7;--text:#edf4f7;--green:#21c58e;--red:#ff6177;--gold:#f3c76a}}
+*{{box-sizing:border-box}}body{{margin:0;background:linear-gradient(160deg,#101e28,var(--bg) 55%);color:var(--text);font:15px system-ui,sans-serif}}
+main{{width:min(1180px,100%);margin:auto;padding:22px 16px 60px}}h1{{font-size:25px;margin:0 0 5px}}.intro,.muted{{color:var(--muted)}}.intro{{margin:0 0 18px}}
+.panel{{background:linear-gradient(145deg,#172833,#121e27);border:1px solid var(--line);border-radius:18px;padding:16px;margin:14px 0;box-shadow:0 10px 28px #0003}}
+.controls{{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}}label{{display:block;color:#b9c8d1;font-size:13px;margin-bottom:6px}}
+select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid #3a505d;background:#0c171e;color:var(--text);font:inherit}}
+.actions{{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:14px}}button{{background:#137b68;border:0;font-weight:750;cursor:pointer}}button.secondary{{width:auto;padding-inline:18px;background:#273a46}}
+.statusline{{display:flex;align-items:center;gap:9px;flex-wrap:wrap;color:var(--muted);font-size:13px}}.dot{{width:9px;height:9px;border-radius:50%;background:#71818b}}.dot.on{{background:var(--green);box-shadow:0 0 12px #21c58e99}}
+.current{{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}}.big{{font-size:32px;font-weight:900;line-height:1.15}}.buy{{color:var(--green)}}.sell{{color:var(--red)}}.no-trade{{color:var(--gold)}}
+.meta{{font-size:12px;color:var(--muted);line-height:1.8;margin-top:8px}}.section-title{{font-size:18px;margin:22px 2px 10px}}
+.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}}.event{{border:1px solid var(--line);border-radius:16px;padding:15px 16px;background:#15232d;min-width:0;transition:transform .15s,border-color .15s}}
+.event:hover{{transform:translateY(-2px);border-color:#526d7b}}.event.old{{opacity:.72}}.event .side{{font-size:29px;font-weight:950}}.event .time{{font-size:12px;color:#aab9c2;margin-top:8px;line-height:1.7}}.event .price{{font-size:13px;color:#d4dfe5;margin-top:5px}}
+#events:empty:after{{content:"هنوز سیگنالی در این بازه ثبت نشده است.";display:block;color:var(--muted);padding:18px}}#chart-frame{{width:100%;height:690px;border:0;border-radius:14px;background:#0b1117}}
+.error{{color:#ff8999;white-space:pre-wrap}}.fresh{{color:var(--green)}}.stale{{color:var(--gold)}}
+@media(max-width:560px){{main{{padding:16px 11px 40px}}.big{{font-size:29px}}#chart-frame{{height:520px}}.actions{{grid-template-columns:1fr}}button.secondary{{width:100%}}}}
 </style></head><body><main>
-<h1>داشبورد سیگنال</h1>
-<p>دریافت داده، محاسبه سیگنال و نمودار در یک صفحه؛ فقط دو استراتژی فعال. بدون اجرای معامله.</p>
-<form id="signal-form" method="get" action="/">
-<div class="controls">
-<div><label for="market">نماد بازار</label><select id="market" name="market">{market_select_options}</select></div>
-<div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
-<div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
-<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="{days}"></div>
-</div><button id="submit-button" type="submit">دریافت آخرین سیگنال و نمایش نمودار</button>
-<div id="loading-status" class="loading" role="status" aria-live="polite">در حال دریافت داده‌های بازار و محاسبه سیگنال؛ لطفاً منتظر بمانید...</div>
-</form>
-{f'<div class="panel notice">{html.escape(message)}</div>' if message else ''}
-{frame}
-<div class="muted">داده کهنه یا کندل ناتمام به‌عنوان سیگنال معتبر نمایش داده نمی‌شود. نشانگرهای گذشته سفارش واقعی نیستند.</div>
-</main>
-<script>
+<h1>داشبورد آنلاین سیگنال</h1><p class="intro">پایش خودکار بازار، تصمیم فعلی و آرشیو کارت‌های BUY / SELL؛ فقط دو استراتژی مجاز و بدون اجرای معامله.</p>
+<form id="signal-form" class="panel"><div class="controls">
+<div><label for="market">نماد بازار</label><select id="market" name="market">{markets}</select></div>
+<div><label for="timeframe">تایم‌فریم</label><select id="timeframe" name="timeframe">{timeframes}</select></div>
+<div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategies}</select></div>
+<div><label for="days">بازه داده (روز)</label><input id="days" name="days" type="number" min="1" max="90" value="30"></div></div>
+<div class="actions"><button id="toggle" type="submit">شروع پایش آنلاین</button><button id="refresh" class="secondary" type="button">بررسی فوری</button></div>
+<div class="statusline" style="margin-top:13px"><span id="dot" class="dot"></span><span id="run-status">پایش هنوز شروع نشده است.</span><span id="last-update"></span></div></form>
+<section class="panel"><div class="current"><div><div class="muted">تصمیم فعلی</div><div id="decision" class="big no-trade">NO TRADE</div></div><div class="meta" id="decision-meta">پس از شروع پایش، وضعیت بازار اینجا نمایش داده می‌شود.</div></div><div class="meta" id="data-meta"></div></section>
+<h2 class="section-title">تاریخچه سیگنال‌ها <span class="muted" id="event-count"></span></h2><div id="events" class="cards"></div>
+<h2 class="section-title">نمودار کندلی و نشانگرهای استراتژی</h2><section class="panel"><iframe id="chart-frame" title="نمودار کندلی"></iframe></section>
+<p class="muted">فقط کندل‌های بسته‌شده بررسی می‌شوند. تاریخچه روی همین دستگاه ذخیره می‌شود. داده کهنه سیگنال معتبر جدید تولید نمی‌کند. نشانگرهای تاریخی سفارش واقعی نیستند.</p><div id="error" class="error" role="alert"></div>
+</main><script>
 (() => {{
-  const form = document.getElementById("signal-form");
-  const button = document.getElementById("submit-button");
-  const status = document.getElementById("loading-status");
-  if (!form || !button || !status) return;
-  form.addEventListener("submit", () => {{
-    status.classList.add("visible");
-    button.disabled = true;
-    button.textContent = "در حال دریافت داده...";
-  }});
+ const form=document.getElementById("signal-form"),toggle=document.getElementById("toggle"),refresh=document.getElementById("refresh"),dot=document.getElementById("dot"),status=document.getElementById("run-status"),error=document.getElementById("error"),decision=document.getElementById("decision"),meta=document.getElementById("decision-meta"),dataMeta=document.getElementById("data-meta"),events=document.getElementById("events"),frame=document.getElementById("chart-frame"),lastUpdate=document.getElementById("last-update");
+ let active=false,timer=null,busy=false;
+ const sideClass=s=>s==="BUY"?"buy":s==="SELL"?"sell":"no-trade";
+ function renderCards(items) {{
+  events.replaceChildren();document.getElementById("event-count").textContent="("+items.length+")";
+  for(const item of items) {{
+   const card=document.createElement("article");card.className="event"+(item.age_seconds>3600?" old":"");
+   const side=document.createElement("div");side.className="side "+sideClass(item.side);side.textContent=item.side;
+   const time=document.createElement("div");time.className="time";time.textContent=item.signal_time_local+" · "+item.age_text;
+   const price=document.createElement("div");price.className="price";price.textContent="قیمت بسته‌شدن کندل: "+Number(item.close_price).toLocaleString(undefined,{{maximumFractionDigits:8}});
+   card.append(side,time,price);events.append(card);
+  }}
+ }}
+ async function poll() {{
+  if(busy||!active)return;busy=true;error.textContent="";
+  try {{
+   const response=await fetch("/api/poll?"+new URLSearchParams(new FormData(form)),{{cache:"no-store"}});
+   const data=await response.json();if(!response.ok)throw new Error(data.error||"دریافت داده ناموفق بود.");
+   decision.textContent=data.decision_label;decision.className="big "+sideClass(data.decision_label);
+   meta.textContent=data.market+" · "+data.timeframe+" · "+data.strategy+(data.decision.reason?" · علت: "+data.decision.reason:"");
+   dataMeta.textContent=(data.fresh?"داده تازه":"داده کهنه")+" · "+data.provider+" · "+data.source+" · "+data.closed_candles+" کندل بسته · تلاش ارائه‌دهندگان: "+data.provider_attempts+" · دریافت: "+data.retrieval_time_utc;
+   renderCards(data.history||[]);if(data.chart)frame.srcdoc=data.chart;
+   lastUpdate.textContent="آخرین بررسی: "+new Date(data.polled_at_utc).toLocaleTimeString();
+   status.textContent="پایش فعال · بررسی خودکار هر 10 ثانیه";status.className=data.fresh?"fresh":"stale";
+  }} catch(e) {{error.textContent="خطا در دریافت داده: "+e.message;status.textContent="پایش فعال است؛ تلاش بعدی خودکار انجام می‌شود.";}}
+  finally {{busy=false;}}
+ }}
+ function start() {{if(active)return;active=true;dot.classList.add("on");toggle.textContent="توقف پایش";status.textContent="در حال اتصال به منبع بازار...";poll();timer=setInterval(poll,10000);}}
+ function stop() {{active=false;if(timer)clearInterval(timer);timer=null;dot.classList.remove("on");toggle.textContent="شروع پایش آنلاین";status.textContent="پایش متوقف شد.";}}
+ form.addEventListener("submit",e=>{{e.preventDefault();if(active)stop();else start();}});
+ refresh.addEventListener("click",()=>{{if(!active)start();else poll();}});
+ for(const el of form.querySelectorAll("select,input"))el.addEventListener("change",()=>{{if(active){{error.textContent="";poll();}}}});
 }})();
-</script>
-</body></html>"""
-
+</script></body></html>"""
 
 class DashboardHandler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:
-        parsed = urlparse(self.path)
-        query = parse_qs(parsed.query)
-        if not query:
-            self._send(_page())
-            return
-        market = query.get("market", ["BTCUSDT"])[0].strip().upper()
-        timeframe = query.get("timeframe", ["1H"])[0]
-        strategy_name = query.get("strategy", ["Bollinger_Reversion"])[0]
+    def do_GET(self):
+        parsed=urlparse(self.path)
+        if parsed.path=="/api/poll": self._api_poll(parse_qs(parsed.query));return
+        self._send(_page())
+    def _api_poll(self,query):
         try:
-            market = validate_market_or_crypto_symbol(market)
-            timeframe = validate_timeframe(timeframe)
-            if strategy_name not in STRATEGY_REGISTRY:
-                raise ValueError("استراتژی انتخاب‌شده مجاز نیست.")
-            days = int(query.get("days", ["30"])[0])
-            if not 1 <= days <= 90:
-                raise ValueError("بازه داده باید بین ۱ تا ۹۰ روز باشد.")
-            now = pd.Timestamp.now(tz="UTC")
-            end = now
-            start = end - pd.Timedelta(days=days)
-            df = _market_data(market, timeframe, start, end)
-            duration = pd.Timedelta(TIMEFRAME_DURATION[timeframe])
-            df = df.loc[(df.index + duration) <= now]
-            if df.empty:
-                raise ValueError("داده کندل بسته‌شده برای این نماد و تایم‌فریم دریافت نشد.")
-            age_hours = (now - (df.index[-1] + duration)).total_seconds() / 3600
-            max_age_hours = duration.total_seconds() * 3 / 3600
-            fresh = age_hours >= 0 and age_hours <= max_age_hours
-            strategy = STRATEGY_REGISTRY[strategy_name]()
-            decision = latest_decision_report(
-                df, strategy, RiskConfig(), market, timeframe,
-                provenance=str(df.attrs.get("source", "public market data")),
-            )
-            if not fresh:
-                decision["decision"] = {
-                    "label": "NO TRADE",
-                    "reason": "stale_data" if age_hours > max_age_hours else "latest_candle_not_closed",
-                }
+            market=validate_market_or_crypto_symbol(query.get("market",["XAUUSD"])[0])
+            timeframe=validate_timeframe(query.get("timeframe",["1m"])[0])
+            strategy=query.get("strategy",["Bollinger_Reversion"])[0]
+            if strategy not in STRATEGY_REGISTRY: raise ValueError("استراتژی انتخاب‌شده مجاز نیست.")
+            days=int(query.get("days",["30"])[0])
+            if not 1<=days<=90: raise ValueError("بازه داده باید بین ۱ تا ۹۰ روز باشد.")
+            self._send_json(_poll(market,timeframe,strategy,days))
+        except Exception as exc: self._send_json({"error":str(exc)},status=400)
+    def _send(self,body,status=200):
+        encoded=body.encode("utf-8");self.send_response(status)
+        self.send_header("Content-Type","text/html; charset=utf-8");self.send_header("Content-Length",str(len(encoded)));self.send_header("Cache-Control","no-store");self.end_headers()
+        try:self.wfile.write(encoded)
+        except BrokenPipeError:return
+    def _send_json(self,payload,status=200):
+        encoded=json.dumps(payload,ensure_ascii=False,default=str).encode("utf-8");self.send_response(status)
+        self.send_header("Content-Type","application/json; charset=utf-8");self.send_header("Content-Length",str(len(encoded)));self.send_header("Cache-Control","no-store");self.end_headers()
+        try:self.wfile.write(encoded)
+        except BrokenPipeError:return
+    def log_message(self,_format,*_args):return
 
-            # Display the latest actual strategy transition, regardless of age.
-            # This is presentation only and does not alter the current decision.
-            direction = strategy.raw_direction(df)
-            signal_positions = [
-                position for position, value in enumerate(direction.tolist())
-                if int(value) in {-1, 1}
-            ]
-            recent_signal_text = "آخرین سیگنال در داده‌های دریافت‌شده پیدا نشد."
-            if signal_positions:
-                signal_position = signal_positions[-1]
-                signal_side = int(direction.iloc[signal_position])
-                signal_label = "BUY" if signal_side == 1 else "SELL"
-                signal_open = pd.Timestamp(df.index[signal_position])
-                if signal_open.tzinfo is None:
-                    signal_open = signal_open.tz_localize("UTC")
-                signal_closed = signal_open + duration
-                signal_age = max(0, int((now - signal_closed).total_seconds()))
-                signal_local_time = signal_closed.to_pydatetime().astimezone()
-                if not fresh:
-                    signal_status = "تاریخی · داده فعلی کهنه است"
-                elif signal_position == len(df) - 1:
-                    signal_status = "NEW · سیگنال جدید، در انتظار کندل بعدی"
-                elif (
-                    signal_position == len(df) - 2
-                    and decision.get("decision", {}).get("label") == signal_label
-                ):
-                    signal_status = "LIVE · سیگنال در آخرین تصمیم"
-                else:
-                    signal_status = "سیگنال قبلی"
-                if signal_age < 3600:
-                    age_text = f"{signal_age // 60} دقیقه قبل"
-                else:
-                    age_text = f"{signal_age // 3600} ساعت و {(signal_age % 3600) // 60} دقیقه قبل"
-                recent_signal_text = (
-                    f"آخرین سیگنال استراتژی: {signal_label} | وضعیت: {signal_status}\n"
-                    f"زمان کندل سیگنال (محلی): {signal_local_time.strftime('%Y-%m-%d %H:%M:%S %Z')} | "
-                    f"زمان UTC: {signal_closed.isoformat()} | {age_text}"
-                )
-
-            chart = build_chart_html(
-                df, market=market, timeframe=timeframe,
-                strategy_name=strategy_name, strategy_params={},
-                strategy=strategy, latest_decision=decision,
-            )
-            label = decision.get("decision", {}).get("label", "NO TRADE")
-            source = df.attrs.get("source", "public market data")
-            retrieval = df.attrs.get("retrieval_time_utc", "نامشخص")
-            detail = decision.get("decision", {})
-            reason = detail.get("reason")
-            levels = ""
-            if label in {"BUY", "SELL"}:
-                levels = (
-                    f"\nورود: {detail.get('entry')} | حد ضرر: {detail.get('stop')} | "
-                    f"هدف: {detail.get('target')}"
-                )
-            elif reason:
-                levels = f"\nعلت: {reason}"
-            message = (
-                f"تصمیم فعلی: {label} | نماد: {market} | تایم‌فریم: {timeframe} | "
-                f"استراتژی: {strategy_name}{levels}\n"
-                f"{recent_signal_text}\n"
-                f"وضعیت داده: {'تازه' if fresh else 'کهنه'} | منبع: {source} | زمان دریافت: {retrieval} | کندل‌های بسته: {len(df)}"
-            )
-            self._send(_page(
-                message, chart, market=market, timeframe=timeframe,
-                strategy=strategy_name, days=days,
-            ))
-        except Exception as exc:
-            self._send(_page(f"خطا: {exc}", market=market, timeframe=timeframe, strategy=strategy_name), status=400)
-
-    def _send(self, body: str, status: int = 200) -> None:
-        encoded = body.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        try:
-            self.wfile.write(encoded)
-        except BrokenPipeError:
-            # The browser may cancel a slow request while market data is unavailable.
-            return
-
-    def log_message(self, _format: str, *_args) -> None:
-        return
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Local unified signal dashboard")
-    parser.add_argument("--host", default="127.0.0.1", help="Local interface; do not expose publicly")
-    parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--no-browser", action="store_true")
-    args = parser.parse_args(argv)
-    if args.host not in {"127.0.0.1", "localhost"}:
-        parser.error("The dashboard is local-only; --host must be 127.0.0.1 or localhost.")
-    if not 1 <= args.port <= 65535:
-        parser.error("--port must be between 1 and 65535.")
-    server = ThreadingHTTPServer((args.host, args.port), DashboardHandler)
-    url = f"http://127.0.0.1:{args.port}/"
-    print(f"Signal dashboard: {url} (Ctrl+C to stop)", flush=True)
-    if not args.no_browser:
-        webbrowser.open(url)
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        server.server_close()
+def main(argv:list[str]|None=None)->int:
+    parser=argparse.ArgumentParser(description="Local live signal dashboard")
+    parser.add_argument("--host",default="127.0.0.1",help="Local interface; do not expose publicly")
+    parser.add_argument("--port",type=int,default=8765);parser.add_argument("--no-browser",action="store_true");args=parser.parse_args(argv)
+    if args.host not in {"127.0.0.1","localhost"}:parser.error("The dashboard is local-only; --host must be 127.0.0.1 or localhost.")
+    if not 1<=args.port<=65535:parser.error("--port must be between 1 and 65535.")
+    server=ThreadingHTTPServer((args.host,args.port),DashboardHandler);url=f"http://127.0.0.1:{args.port}/"
+    print(f"Signal dashboard: {url} (Ctrl+C to stop)",flush=True)
+    if not args.no_browser:webbrowser.open(url)
+    try:server.serve_forever()
+    except KeyboardInterrupt:pass
+    finally:server.server_close()
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__=="__main__":raise SystemExit(main())
