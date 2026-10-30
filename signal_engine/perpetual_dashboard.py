@@ -26,8 +26,6 @@ TIMEFRAME_DURATION = {
 
 
 def _page() -> str:
-    symbols = ("BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-               "ADAUSDT", "DOGEUSDT", "LINKUSDT", "AVAXUSDT")
     provider_options = "".join(
         f'<option value="{html.escape(p)}">{html.escape(p)}</option>' for p in PROVIDERS
     )
