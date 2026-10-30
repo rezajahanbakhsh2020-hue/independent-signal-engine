@@ -65,7 +65,7 @@ def _history(market,timeframe,strategy):
     return result
 
 def _poll(market,timeframe,strategy_name,days):
-    now=pd.Timestamp.now(tz="UTC"); df=_market_data(market,timeframe,now-pd.Timedelta(days=days),now)
+    now=pd.Timestamp.now(tz="UTC")\n    warmup=pd.Timedelta(TIMEFRAME_DURATION[timeframe])*50\n    df=_market_data(market,timeframe,now-pd.Timedelta(days=days)-warmup,now)
     duration=pd.Timedelta(TIMEFRAME_DURATION[timeframe]); df=df.loc[(df.index+duration)<=now]
     if df.empty: raise ValueError("داده کندل بسته‌شده برای این نماد و تایم‌فریم دریافت نشد.")
     age_seconds=max(0.0,(now-(df.index[-1]+duration)).total_seconds())
@@ -145,7 +145,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
    const data=await response.json();if(!response.ok)throw new Error(data.error||"دریافت داده ناموفق بود.");
    decision.textContent=data.decision_label;decision.className="big "+sideClass(data.decision_label);
    meta.textContent=data.market+" · "+data.timeframe+" · "+data.strategy+(data.decision.reason?" · علت: "+data.decision.reason:"");
-   dataMeta.textContent=(data.fresh?"داده تازه":"داده کهنه")+" · "+data.provider+" · "+data.source+" · "+data.closed_candles+" کندل بسته · تلاش ارائه‌دهندگان: "+data.provider_attempts+" · دریافت: "+data.retrieval_time_utc;
+   dataMeta.textContent=(data.fresh?"داده تازه":"داده کهنه")+" · "+data.provider+" · "+data.source+" · "+data.closed_candles+" کندل بسته · تلاش ارائه‌دهندگان: "+data.provider_attempts+" · دریافت: "+data.retrieval_time_utc+(data.provider_failures.length?" · مسیرهای ناموفق: "+data.provider_failures.join(" / "):"");
    initialLoaded=true;renderCards(data.history||[]);if(data.chart)frame.srcdoc=data.chart;
    lastUpdate.textContent="آخرین بررسی: "+new Date(data.polled_at_utc).toLocaleTimeString();
    status.textContent="پایش فعال · بررسی خودکار هر 10 ثانیه";status.className=data.fresh?"fresh":"stale";
