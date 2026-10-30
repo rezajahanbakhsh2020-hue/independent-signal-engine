@@ -82,7 +82,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 <div class="metrics">
 <div class="metric"><span class="muted">تصمیم فعلی</span><b class="decision gold" id="decision">NO TRADE</b></div>
 <div class="metric"><span class="muted">آخرین قیمت بسته</span><b id="last-price">—</b></div>
-<div class="metric"><span class="muted">تعداد کندل بسته</span><b id="candle-count">—</b></div>
+<div class="metric"><span class="muted">کندل‌های نمایش‌داده‌شده</span><b id="candle-count">—</b></div>
 <div class="metric"><span class="muted">آخرین کندل UTC</span><b id="last-candle">—</b></div>
 <div class="metric"><span class="muted">تازگی داده</span><b id="freshness">—</b></div>
 </div><p class="status" id="decision-reason"></p><p class="status" id="signal-diagnostics">پس از دریافت داده، تعداد رویدادهای استراتژی و وضعیت محاسبه ریسک نمایش داده می‌شود.</p>
@@ -101,6 +101,24 @@ const canvas=document.getElementById("chart"),ctx=canvas.getContext("2d");
 let candleData=[],signalData=[],chartSignalData=[];
 const fmt=v=>v===null||v===undefined||!Number.isFinite(Number(v))?"—":Number(v).toLocaleString(undefined,{{maximumFractionDigits:8}});
 const el=id=>document.getElementById(id);
+async function loadSymbols(){
+ const provider=el("provider"),symbol=el("symbol"),previous=symbol.value;
+ symbol.disabled=true;symbol.replaceChildren(new Option("در حال دریافت قراردادهای فعال...",""));
+ status.textContent="در حال دریافت فهرست قراردادهای فعال "+provider.value+"...";
+ try{
+  const response=await fetch("/api/perpetual/symbols?provider="+encodeURIComponent(provider.value),{cache:"no-store"});
+  const data=await response.json();if(!response.ok)throw new Error(data.error||"دریافت فهرست نمادها ناموفق بود");
+  symbol.replaceChildren();
+  for(const value of data.symbols)symbol.add(new Option(value,value));
+  const selected=data.symbols.includes(previous)?previous:(data.symbols.includes("BTCUSDT")?"BTCUSDT":data.symbols[0]);
+  if(selected)symbol.value=selected;
+  symbol.disabled=!data.symbols.length;
+  status.textContent=data.symbols.length+" قرارداد فعال USDT از "+provider.value+" دریافت شد.";
+ }catch(err){
+  symbol.replaceChildren(new Option("فهرست قراردادها در دسترس نیست",""));
+  symbol.disabled=true;status.textContent="دریافت فهرست نمادها ناموفق";error.textContent=err.message;
+ }
+}
 function draw(){{
  const rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
  canvas.width=Math.max(1,Math.floor(rect.width*dpr));canvas.height=Math.max(1,Math.floor(rect.height*dpr));
@@ -142,11 +160,11 @@ function render(data){{
  const currentSide=data.fresh&&["BUY","SELL"].includes(data.decision.label)?data.decision.label:null;
  chartSignalData=currentSide?signalData.filter(s=>s.side===currentSide&&s.t>=candleData[0].t&&s.t<=candleData[candleData.length-1].t).slice(-1):[];
  el("last-price").textContent=fmt(candleData[candleData.length-1].close);
- el("candle-count").textContent=(data.closed_candle_count??candleData.length).toLocaleString();
+ el("candle-count").textContent=candleData.length.toLocaleString();
  el("last-candle").textContent=new Date(candleData[candleData.length-1].t).toISOString();
  el("freshness").textContent=data.fresh?"FRESH":"STALE";
  el("freshness").className=data.fresh?"green":"gold";
- el("signal-count").textContent="("+signalData.length+")";
+ el("signal-count").textContent="("+Math.min(signalData.length,5)+")";
  const d=data.signal_diagnostics||{};el("signal-diagnostics").textContent="رویدادهای خام استراتژی: "+(d.strategy_events??"—")+" · رویدادهای دارای کندل اجرای بعدی: "+(d.actionable_events??"—")+" · سیگنال‌های منتظر کندل بعدی: "+(d.pending_events??"—")+" · سیگنال با سطوح ریسک ناموجود: "+(d.risk_levels_unavailable??"—");
  const tbody=el("signals");tbody.replaceChildren();
  if(!signalData.length){{const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=9;td.textContent="در این بازه رویداد قابل‌اقدام BUY/SELL ثبت نشده است؛ جزئیات در بخش تشخیص سیگنال آمده است.";tr.append(td);tbody.append(tr);}}
@@ -162,9 +180,11 @@ form.addEventListener("submit",async e=>{{
   const q=new URLSearchParams(new FormData(form));
   const response=await fetch("/api/perpetual/poll?"+q.toString(),{{cache:"no-store"}});
   const data=await response.json();if(!response.ok)throw new Error(data.error||"Perpetual provider request failed");
-  render(data);status.textContent="دریافت موفق · "+data.candles.length+" کندل اخیر در نمودار · "+(data.closed_candle_count??data.candles.length)+" کندل بسته دریافت و تحلیل شد · بدون fallback";status.className="status green";
+  render(data);status.textContent="دریافت موفق · "+data.candles.length+" کندل در نمودار · "+data.signals.length+" سیگنال اخیر در Log · بدون fallback";status.className="status green";
  }}catch(err){{status.textContent="دریافت ناموفق";status.className="status red";error.textContent=err.message;}}
 }});
+el("provider").addEventListener("change",loadSymbols);
+loadSymbols();
 window.addEventListener("resize",()=>{{if(candleData.length)draw();}});
 }})();
 </script></body></html>"""
@@ -250,7 +270,7 @@ def _poll(provider: str, symbol: str, timeframe: str, strategy_name: str, days: 
         "timestamp_unit": df.attrs["timestamp_unit"],
         "retrieval_time_utc": df.attrs["retrieval_time_utc"],
         "candles": candles, "closed_candle_count": int(len(df)), "chart_candle_limit": 5,
-        "signals": signals, "signal_diagnostics": signal_diagnostics, "decision": decision,
+        "signals": signals[-5:], "signal_diagnostics": signal_diagnostics, "decision": decision,
         "fresh": fresh, "data_age_seconds": int(age),
         "latest_closed_candle_utc": df.index[-1].isoformat(),
         "validation_report": df.attrs["validation_report"],
