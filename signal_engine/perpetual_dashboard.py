@@ -278,6 +278,10 @@ def _poll(provider: str, symbol: str, timeframe: str, strategy_name: str, days: 
     }
 
 
+def api_symbols(query: dict[str, list[str]]) -> dict:
+    provider = query.get("provider", ["Bitget"])[0]
+    return {"provider": provider, "symbols": list_symbols(provider)}
+
 def api_poll(query: dict[str, list[str]]) -> dict:
     provider = query.get("provider", ["Bitget"])[0]
     symbol = query.get("symbol", ["BTCUSDT"])[0]
