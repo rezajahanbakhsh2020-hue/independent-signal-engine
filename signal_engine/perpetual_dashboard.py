@@ -77,7 +77,7 @@ th{{color:#b9c8d1;background:#101d26;position:sticky;top:0}}.buy{{color:var(--gr
 <div><label for="symbol">نماد پایه بازار</label><select id="symbol" name="symbol">{market_options}</select></div>
 <div><label for="timeframe">تایم‌فریم مستقل</label><select id="timeframe" name="timeframe">{timeframe_options}</select></div>
 <div><label for="strategy">استراتژی</label><select id="strategy" name="strategy">{strategy_options}</select></div>
-<div><label for="days">تاریخچه (روز)</label><input id="days" name="days" type="number" min="1" max="365" value="30"></div>
+<div><label for="days">تاریخچه کندل‌ها (روز، حداکثر ۳۰)</label><input id="days" name="days" type="number" min="1" max="30" value="30"></div>
 </div><button type="submit">دریافت نمودار و سیگنال‌ها</button>
 <div class="status" id="status">برای دریافت داده، صرافی و تایم‌فریم را انتخاب کنید.</div></form>
 <section class="panel">
@@ -177,8 +177,8 @@ def _poll(provider: str, symbol: str, timeframe: str, strategy_name: str, days: 
     tf = validate_timeframe(timeframe)
     if strategy_name not in STRATEGY_REGISTRY:
         raise ValueError("استراتژی انتخاب‌شده مجاز نیست.")
-    if not 1 <= days <= 365:
-        raise ValueError("بازه تاریخچه باید بین ۱ تا ۳۶۵ روز باشد.")
+    if not 1 <= days <= 30:
+        raise ValueError("بازه تاریخچه باید بین ۱ تا ۳۰ روز باشد؛ برای دریافت تاریخچه طولانی‌تر باید سقف صفحه‌بندی هر ارائه‌دهنده جداگانه افزایش یابد.")
     now = pd.Timestamp.now(tz="UTC")
     duration = pd.Timedelta(TIMEFRAME_DURATION[tf])
     start = now - pd.Timedelta(days=days)
