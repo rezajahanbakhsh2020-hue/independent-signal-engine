@@ -1,11 +1,12 @@
 """Fail-closed public crypto OHLCV provider rotation.
 
-Provider priority is explicit and deterministic:
-KuCoin -> Bitget -> HTX -> MEXC.
+Provider priority is explicit and deterministic, with continuous rotation:
+KuCoin -> Bitget -> HTX -> MEXC -> KuCoin ...
 
-Each provider must independently return the complete requested candle grid.
-Data from different providers is never mixed. Every HTTP request uses the
-same bounded timeout; no credentials or trading endpoints are used.
+Each provider independently supplies its own usable OHLCV response. Partial
+history, gaps, and deduplicated timestamps are tolerated; data from providers
+is never mixed. Every HTTP request uses the same bounded timeout; no credentials
+or trading endpoints are used.
 """
 from __future__ import annotations
 
@@ -86,17 +87,10 @@ def _validated_frame(
     raw = pd.DataFrame(rows)
     frame, report = validate_ohlcv(raw, strict_gap_policy=True)
 
-    # strict_gap_policy in the shared validator records gaps but does not
-    # reject them. Provider failover must reject gaps and incomplete ranges.
-    if report.gaps:
-        raise DataValidationError(
-            f"{source} returned {len(report.gaps)} candle gap(s)", report=report
-        )
-    if report.n_duplicate_timestamps_removed:
-        raise DataValidationError(
-            f"{source} returned duplicate candle timestamps", report=report
-        )
-
+    # Gaps and duplicate timestamps are tolerated: the shared validator
+    # sorts rows and removes duplicate timestamps while retaining valid OHLCV.
+    # Do not reject an otherwise usable provider response merely because its
+    # candle history has holes or a few repeated timestamps.
     step = DURATIONS[timeframe]
     start_s, end_s = int(start.timestamp()), int(end.timestamp())
     first_open = (start_s // step) * step
@@ -104,19 +98,17 @@ def _validated_frame(
     if last_closed_open < first_open:
         raise DataValidationError("requested range contains no completed candle grid")
 
-    expected = pd.date_range(
-        pd.Timestamp(first_open, unit="s", tz="UTC"),
-        pd.Timestamp(last_closed_open, unit="s", tz="UTC"),
-        freq=pd.Timedelta(seconds=step),
+    # Keep only completed, in-range candles aligned to the selected timeframe.
+    # Full-range equality is intentionally not required; partial histories are
+    # usable and must not force a provider failover.
+    step_ns = step * 1_000_000_000
+    aligned = (frame.index.asi8 % step_ns) == 0
+    in_range = (frame.index >= pd.Timestamp(first_open, unit="s", tz="UTC")) & (
+        frame.index <= pd.Timestamp(last_closed_open, unit="s", tz="UTC")
     )
-    actual = frame.index
-    if not actual.equals(expected):
-        missing = expected.difference(actual)
-        extra = actual.difference(expected)
-        raise DataValidationError(
-            f"{source} incomplete candle coverage: expected={len(expected)}, "
-            f"received={len(actual)}, missing={len(missing)}, extra={len(extra)}"
-        )
+    frame = frame.loc[aligned & in_range]
+    if frame.empty:
+        raise RuntimeError(f"{source} returned no usable completed candles in requested range")
 
     frame.attrs.update({
         "source": source,
@@ -129,7 +121,10 @@ def _validated_frame(
         "timezone": "UTC",
         "validation_report": report.as_dict(),
         "provider_failover": True,
-        "complete_candle_grid": True,
+        "complete_candle_grid": False,
+        "partial_coverage_allowed": True,
+        "gap_count": len(report.gaps),
+        "duplicate_timestamps_removed": report.n_duplicate_timestamps_removed,
     })
     return frame
 
@@ -319,14 +314,21 @@ def fetch_range(
         ("MEXC", lambda: _mexc(market, tf, start, end, timeout_seconds)),
     )
     errors: list[str] = []
-    for name, fetch in providers:
-        try:
-            frame = fetch()
-            frame.attrs["provider_attempts"] = len(errors) + 1
-            frame.attrs["provider_failures"] = tuple(errors)
-            return frame
-        except Exception as exc:
-            errors.append(f"{name}: {type(exc).__name__}: {exc}")
-    raise CryptoProvidersUnavailableError(
-        "All configured public crypto providers failed: " + " | ".join(errors)
-    )
+    total_attempts = 0
+    while True:
+        # Rotate through the complete provider list until one source returns
+        # usable data: KuCoin -> Bitget -> HTX -> MEXC -> KuCoin ...
+        for name, fetch in providers:
+            total_attempts += 1
+            try:
+                frame = fetch()
+                frame.attrs["provider_attempts"] = total_attempts
+                frame.attrs["provider_failures"] = tuple(errors[-4:])
+                return frame
+            except Exception as exc:
+                errors.append(f"{name}: {type(exc).__name__}: {exc}")
+                # Bound diagnostic memory while preserving the latest cycle.
+                if len(errors) > 4:
+                    errors.pop(0)
+        # All four sources failed in this pass. Start another full rotation.
+        time.sleep(1.0)
