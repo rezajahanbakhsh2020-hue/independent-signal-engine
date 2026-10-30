@@ -20,7 +20,7 @@ import pandas as pd
 from signal_engine.constants import validate_crypto_symbol, validate_timeframe
 from signal_engine.data.validate import DataValidationError, validate_ohlcv
 
-DEFAULT_TIMEOUT_SECONDS = 2.5
+DEFAULT_TIMEOUT_SECONDS = 15.0
 MAX_REQUESTS = 300
 LIMIT = 1000
 
