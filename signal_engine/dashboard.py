@@ -36,7 +36,7 @@ def _risk_levels_for_event(df, signal_idx, side, atr_values, market, timeframe):
         df=df,
         risk_config=RISK_CONFIG,
         atr_series=atr_values,
-        equity=10_000.0,
+        equity=1.0,  # sizing is unused; only canonical entry/stop geometry is displayed
         market=market,
         timeframe=timeframe,
         strategy_name="dashboard-display",
@@ -122,6 +122,12 @@ def _database():
     for name, statement in migrations:
         if name not in existing:
             db.execute(statement)
+    # Invalidate levels from older dashboard-only formulas; the next valid
+    # event pass will repopulate them using the canonical backtest model.
+    db.execute("""UPDATE signal_events SET
+      entry_price=NULL, stop_loss=NULL, tp1=NULL, tp2=NULL, tp3=NULL,
+      risk_distance=NULL, risk_atr=NULL, risk_model=NULL
+      WHERE risk_model IS NOT NULL AND risk_model != ?""", (RISK_MODEL,))
     db.execute("CREATE INDEX IF NOT EXISTS idx_signal_events_scope_time ON signal_events(market,timeframe,strategy,signal_time_utc DESC)")
     return db
 
