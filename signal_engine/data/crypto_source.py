@@ -1,12 +1,7 @@
-"""Fail-closed public crypto OHLCV provider failover.
+"""Fail-closed public crypto OHLCV adapter using Bitget only.
 
-Provider priority is explicit and deterministic: Bitget -> KuCoin -> HTX ->
-MEXC. Each provider is attempted once per poll and receives a bounded elapsed
-time budget, including all pagination requests.
-
-Each provider independently supplies its own usable OHLCV response. Partial
-history, gaps, and deduplicated timestamps are tolerated; data from providers
-is never mixed. No credentials or trading endpoints are used.
+KuCoin, HTX, and MEXC adapters remain available but inactive during the
+single-provider validation phase. No credentials or trading endpoints are used.
 """
 from __future__ import annotations
 
@@ -96,10 +91,8 @@ def _validated_frame(
     raw = pd.DataFrame(rows)
     frame, report = validate_ohlcv(raw, strict_gap_policy=True)
 
-    # Gaps and duplicate timestamps are tolerated: the shared validator
-    # sorts rows and removes duplicate timestamps while retaining valid OHLCV.
-    # Do not reject an otherwise usable provider response merely because its
-    # candle history has holes or a few repeated timestamps.
+    # Gaps and duplicate timestamps are reported: the shared validator sorts
+    # rows and removes duplicate timestamps while retaining valid OHLCV.
     step = DURATIONS[timeframe]
     start_s, end_s = int(start.timestamp()), int(end.timestamp())
     first_open = (start_s // step) * step
@@ -129,7 +122,7 @@ def _validated_frame(
         "coverage_end_utc": frame.index[-1].isoformat(),
         "timezone": "UTC",
         "validation_report": report.as_dict(),
-        "provider_failover": True,
+        "provider_failover": False,
         "complete_candle_grid": False,
         "partial_coverage_allowed": True,
         "gap_count": len(report.gaps),
@@ -309,7 +302,7 @@ def fetch_range(
     end_utc: pd.Timestamp,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
 ) -> pd.DataFrame:
-    """Fetch usable OHLCV from the first available provider; never mix sources."""
+    """Fetch the requested closed-candle range from Bitget only; never mix sources."""
     market = validate_crypto_symbol(symbol)
     tf = validate_timeframe(timeframe)
     start, end = _utc(start_utc, "start_utc"), _utc(end_utc, "end_utc")
@@ -320,18 +313,13 @@ def fetch_range(
     if timeout_seconds <= 0:
         raise DataValidationError("timeout_seconds must be positive")
 
-    providers = (
-        ("Bitget", _bitget),
-        ("KuCoin", _kucoin),
-        ("HTX", _htx),
-        ("MEXC", _mexc),
-    )
+    providers = (("Bitget", _bitget),)
     errors: list[str] = []
     last_error: Exception | None = None
     started = time.monotonic()
 
-    # A poll performs one bounded pass. Each provider gets its own wall-clock
-    # budget, including all pagination requests, before failover continues.
+    # A poll performs one bounded Bitget pass. Its wall-clock budget covers
+    # all pagination requests; no alternate provider is silently substituted.
     for total_attempts, (name, fetch) in enumerate(providers, start=1):
         deadline = time.monotonic() + PROVIDER_BUDGET_SECONDS
         try:
@@ -346,5 +334,5 @@ def fetch_range(
 
     details = "; ".join(errors)
     raise CryptoProvidersUnavailableError(
-        f"All crypto providers failed for {market} {tf}: {details}"
+        f"Bitget failed for {market} {tf}: {details}"
     ) from last_error
