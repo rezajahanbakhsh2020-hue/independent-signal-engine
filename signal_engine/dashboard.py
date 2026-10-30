@@ -142,7 +142,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
  async function poll() {{
   if(busy||!active)return;busy=true;error.textContent="";
   const controller=new AbortController();requestController=controller;
-  const requestTimeout=setTimeout(()=>controller.abort(),125000);
+  const requestTimeout=setTimeout(()=>controller.abort(),135000);
   try {{
    const q=new URLSearchParams(new FormData(form));
    const key=[q.get("market"),q.get("timeframe"),q.get("strategy"),q.get("days")].join("|");
@@ -158,7 +158,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
    lastUpdate.textContent="آخرین بررسی: "+new Date(data.polled_at_utc).toLocaleTimeString();
    status.textContent="پایش فعال · بررسی خودکار هر 10 ثانیه";status.className=data.fresh?"fresh":"stale";
   }} catch(e) {{
-   if(e.name==="AbortError"){{if(active){{error.textContent="مهلت دریافت داده پس از ۱۲۵ ثانیه تمام شد؛ درخواست بعدی دوباره تلاش می‌کند.";status.textContent="دریافت داده به مهلت زمانی رسید.";}}}}
+   if(e.name==="AbortError"){{if(active){{error.textContent="مهلت دریافت داده پس از ۱۳۵ ثانیه تمام شد؛ درخواست بعدی دوباره تلاش می‌کند.";status.textContent="دریافت داده به مهلت زمانی رسید.";}}}}
    else{{error.textContent="خطا در دریافت داده: "+e.message;status.textContent="پایش فعال است؛ تلاش بعدی خودکار انجام می‌شود.";}}
   }}
   finally {{clearTimeout(requestTimeout);if(requestController===controller)requestController=null;busy=false;}}
