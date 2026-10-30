@@ -19,6 +19,7 @@ from signal_engine.strategies.base import transition_direction
 TIMEFRAME_DURATION = {"1m":timedelta(minutes=1),"5m":timedelta(minutes=5),"15m":timedelta(minutes=15),"30m":timedelta(minutes=30),"1H":timedelta(hours=1),"4H":timedelta(hours=4),"1D":timedelta(days=1)}
 POLL_SECONDS = 10
 CRYPTO_LOOKBACK_CANDLES = 300
+DB_PATH = Path.home() / ".signal-engine" / "signal-history.sqlite3"
 RISK_CONFIG = RiskConfig()
 DISPLAY_COST_CONFIG = CostConfig()
 RISK_TARGET_MULTIPLES = (1.0, 2.0, 3.0)
