@@ -26,7 +26,7 @@ def test_each_provider_uses_explicit_timestamp_unit_and_returns_closed_utc_candl
     monkeypatch, provider
 ):
     start = pd.Timestamp("2025-02-01T00:00:00Z")
-    end = start + pd.Timedelta(minutes=1)
+    end = start + pd.Timedelta(minutes=2)
     seconds = int(start.timestamp())
     millis = seconds * 1000
     calls = []
@@ -34,24 +34,27 @@ def test_each_provider_uses_explicit_timestamp_unit_and_returns_closed_utc_candl
     def fake_json(url, timeout):
         calls.append((url, timeout))
         if provider == "Bitget":
-            return {"code": "00000", "data": [[str(millis), "100", "102", "99", "101", "12", "1200"]]}
+            return {"code": "00000", "data": [[str(millis), "100", "102", "99", "101", "12", "1200"], [str(millis + 60000), "101", "103", "100", "102", "13", "1300"]]}
         if provider == "KuCoin":
-            return {"code": "200000", "data": [[millis, "100", "102", "99", "101", "12", "1200"]]}
+            return {"code": "200000", "data": [[millis, "100", "102", "99", "101", "12", "1200"], [millis + 60000, "101", "103", "100", "102", "13", "1300"]]}
         if provider == "HTX":
             return {"status": "ok", "data": [{
                 "id": seconds, "open": "100", "high": "102", "low": "99",
                 "close": "101", "vol": "12",
+            }, {
+                "id": seconds + 60, "open": "101", "high": "103", "low": "100",
+                "close": "102", "vol": "13",
             }]}
         return {"success": True, "data": {
-            "time": [seconds], "open": ["100"], "high": ["102"],
-            "low": ["99"], "close": ["101"], "vol": ["12"],
+            "time": [seconds, seconds + 60], "open": ["100", "101"], "high": ["102", "103"],
+            "low": ["99", "100"], "close": ["101", "102"], "vol": ["12", "13"],
         }}
 
     monkeypatch.setattr(source, "_json", fake_json)
     frame = source.fetch_range(provider, "BTCUSDT", "1m", start, end)
 
     assert len(calls) == 1
-    assert len(frame) == 1
+    assert len(frame) == 2
     assert frame.index[0] == start
     assert str(frame.index.tz) == "UTC"
     assert frame.iloc[0]["close"] == 101.0
