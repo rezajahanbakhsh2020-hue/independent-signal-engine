@@ -303,7 +303,7 @@ select,input,button{{width:100%;padding:12px;border-radius:10px;border:1px solid
     addLevel(risk,"TAKE PROFIT 3 · NET 3R",item.tp3,"risk-target");
    }} else {{
     const unavailable=document.createElement("div");unavailable.className="risk-na";
-    unavailable.textContent="سطوح ریسک معتبر برای این سیگنال قابل محاسبه نیست؛ داده یا ساختار کافی موجود نیست.";
+    unavailable.textContent="سطوح ریسک معتبر محاسبه نشد؛ تاریخچه، ATR یا سازگاری قیمت‌ها با مدل هزینه کافی نیست.";
     risk.append(unavailable);
    }}
    const modelNote=document.createElement("div");modelNote.className="risk-model-note";modelNote.textContent=item.risk_model||"مدل هزینه و ریسک در زمان ثبت این رویداد موجود نبوده است.";risk.append(modelNote);
