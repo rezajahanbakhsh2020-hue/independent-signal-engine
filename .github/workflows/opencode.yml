@@ -1,29 +1,30 @@
-name: Independent Signal Engine Builder
+name: Independent Signal Engine — Phase 0 Data Audit
 
 on:
   issue_comment:
     types: [created]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
   issues: write
+  pull-requests: read
 
 concurrency:
-  group: independent-signal-engine-opencode
+  group: independent-signal-engine-phase0-audit
   cancel-in-progress: false
 
 jobs:
-  build:
+  phase0-audit:
     if: >-
       github.event.issue.pull_request == null &&
+      github.event.issue.number == 1 &&
       github.event.comment.user.login == github.repository_owner &&
       contains(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
     steps:
-      - name: Validate trigger command
+      - name: Validate owner-only Phase 0 trigger
         shell: bash
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
@@ -31,91 +32,17 @@ jobs:
           REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          [[ "${COMMENT_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]
+          printf '%s\n' "$COMMENT_BODY" | grep -Eq '(^|[[:space:]])/opencode([[:space:]]|$)'
 
-          if [[ "${COMMENT_AUTHOR,,}" != "${REPOSITORY_OWNER,,}" ]]; then
-            echo "::error::Only the repository owner may trigger this workflow."
-            exit 1
-          fi
-
-          if ! printf '%s\n' "$COMMENT_BODY" |
-            grep -Eq '(^|[[:space:]])/opencode([[:space:]]|$)'; then
-            echo "::error::Use /opencode as a standalone command."
-            exit 1
-          fi
-
-      - name: Checkout main baseline
+      - name: Checkout current main read-only
         uses: actions/checkout@v4
         with:
           ref: main
-          fetch-depth: 0
-          persist-credentials: true
+          fetch-depth: 1
+          persist-credentials: false
 
-      - name: Verify required resume branch
-        shell: bash
-        env:
-          CHECKPOINT: cc1dab38d9d725e8635f7e1fca3478fcbc509d94
-          RESUME_BRANCH: opencode/issue1-20261029091040
-        run: |
-          set -euo pipefail
-
-          git cat-file -e "${CHECKPOINT}^{commit}" || {
-            echo "::error::Required checkpoint is missing."
-            exit 1
-          }
-
-          git merge-base --is-ancestor "$CHECKPOINT" HEAD || {
-            echo "::error::Checkpoint is not an ancestor of main."
-            exit 1
-          }
-
-          git ls-remote --exit-code --heads origin \
-            "refs/heads/$RESUME_BRANCH" >/dev/null || {
-              echo "::error::Required resume branch is missing. Refusing to restart from main."
-              exit 1
-            }
-
-          git fetch --no-tags origin \
-            "+refs/heads/${RESUME_BRANCH}:refs/remotes/origin/${RESUME_BRANCH}"
-
-          RESUME_SHA="$(git rev-parse "refs/remotes/origin/${RESUME_BRANCH}")"
-
-          git merge-base --is-ancestor "$CHECKPOINT" "$RESUME_SHA" || {
-            echo "::error::Resume branch does not contain the checkpoint."
-            exit 1
-          }
-
-          echo "Checkpoint: $CHECKPOINT"
-          echo "Resume branch: $RESUME_BRANCH"
-          echo "Resume HEAD: $RESUME_SHA"
-          echo "Resume commits:"
-          git log --oneline -20 "$RESUME_SHA"
-
-      - name: Advance resume branch to latest main without rewriting history
-        shell: bash
-        env:
-          RESUME_BRANCH: opencode/issue1-20261029091040
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin main
-          git fetch --no-tags origin "$RESUME_BRANCH"
-          git checkout -B "$RESUME_BRANCH" "refs/remotes/origin/$RESUME_BRANCH"
-
-          if git merge-base --is-ancestor HEAD origin/main; then
-            git merge --ff-only origin/main
-          else
-            # Preserve branch-only commits; stop on conflicts instead of rewriting history.
-            git merge --no-edit origin/main
-          fi
-
-          git push origin "$RESUME_BRANCH"
-
-      - name: Configure Git identity
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Run OpenCode
+      - name: Run bounded Phase 0 audit with OpenCode
         uses: anomalyco/opencode/github@latest
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -124,68 +51,65 @@ jobs:
           agent: build
           use_github_token: true
           prompt: |
-            Work only in this repository and preserve the existing code.
-            The product requirement is a small, unified signal application.
+            Perform ONLY Phase 0 read-only historical data audit for this repository.
+            The repository owner explicitly authorized this task by posting /opencode
+            on issue #1. Work from the checked-out current main commit.
 
-            HARD PRODUCT BOUNDARIES:
-            - Exactly two selectable strategies: Bollinger_Reversion and RSI_Reversal.
-            - Do not add, enable, compare, register, or expose any other strategy.
-            - Do not change either strategy's logic or original parameters.
-            - Keep XAUUSD on its separate BiQuote adapter and crypto on Binance USDT spot pairs.
-            - The primary user experience is one simple local dashboard showing market,
-              timeframe, selected strategy, latest BUY/SELL/NO TRADE decision and chart
-              together. Avoid extra services, databases, credentials, order execution,
-              complex configuration, and unnecessary abstractions.
-            - Preserve closed-candle, freshness, OHLCV validation and fail-closed risk rules.
-            - Do not execute tests, backtests, simulations, market scans or live trades.
-            - Do not fabricate data, signal outcomes, test results or completion claims.
-            - Never commit directly to main, force-push, rewrite history or merge.
-            - Do not create duplicate pull requests.
+            TARGETS:
+            1) BTCUSDT Spot, Binance, 1h.
+            2) XAUUSD, BiQuote, 1h, using the existing adapter
+               signal_engine/data/biquote_source.py.
 
-            Inspect the current branch and existing changes before any edit. Continue only
-            the minimal dashboard and usability work required by the product boundaries.
-            Do not broaden the research scope or revive superseded issue requirements.
-            Report exact branch, commit, changed files, static inspection performed and
-            remaining blockers. State explicitly that no tests/backtests were run.
-            
-      - name: Publish OpenCode commit to the resume branch
-        if: success()
-        shell: bash
-        env:
-          RESUME_BRANCH: opencode/issue1-20261029091040
-        run: |
-          set -euo pipefail
-          git status --short
-          git diff --check
+            HARD SAFETY AND SCOPE:
+            - This is a READ-ONLY audit. Do not modify tracked files.
+            - Do not create files in the repository, commits, branches, or pull requests.
+            - Temporary scripts/data may be written only under /tmp and must be removed.
+            - Do not run strategy backtests, parameter optimization, market scans, or trades.
+            - Do not change the backtester, walkforward, metrics, risk, strategies, dashboard,
+              perpetual adapters, dependencies, or any application configuration.
+            - Do not access or modify P1 or P2.
+            - Do not use API keys or credentials.
+            - Do not fabricate data, costs, market calendars, or coverage.
+            - Respect provider rate limits; sequential pagination, bounded request pacing,
+              retry only transient errors with a small bounded retry count.
+            - Exclude unfinished candles and retain UTC timestamps.
+            - Do not use the stale OpenCode resume branch or any hard-coded checkpoint.
 
-          if [[ -n "$(git status --porcelain)" ]]; then
-            if git status --porcelain | grep -Ei '(^|/)(\.env|[^/]*secret[^/]*|[^/]*token[^/]*|[^/]*credential[^/]*)|\.pem|\.key'; then
-              echo "::error::Potential secret/local credential detected; refusing to publish."
-              exit 1
-            fi
-            git add -A
-            git diff --cached --check
-            if ! git diff --cached --quiet; then
-              git commit -m "Implement independent signal engine updates"
-            fi
-          fi
+            DATA RETRIEVAL:
+            Inspect the existing Binance and BiQuote adapters and reuse their validation,
+            pagination, symbol mapping, and closed-candle semantics wherever practical.
+            Retrieve complete available BTCUSDT 1h Spot history with page size <= 1000.
+            Retrieve available XAUUSD 1h history through the existing BiQuote adapter,
+            respecting MAX_LIMIT=1000 and MAX_ELAPSED_SECONDS=90.
+            Do not stitch providers or exchanges.
 
-          LOCAL_SHA="$(git rev-parse HEAD)"
-          git fetch --no-tags origin "refs/heads/${RESUME_BRANCH}:refs/remotes/origin/${RESUME_BRANCH}"
-          REMOTE_SHA="$(git rev-parse "refs/remotes/origin/${RESUME_BRANCH}")"
+            AUDIT OUTPUT FOR EACH MARKET:
+            - first and last valid CLOSED candle (UTC)
+            - total valid candles
+            - duplicate timestamps
+            - missing expected intervals and largest gap
+            - total missing intervals
+            - coverage fraction only when a valid expected-market calendar is known
+            - pagination completion/truncation and provider errors
+            - exact request count and elapsed time
+            - data-quality caveats
 
-          if [[ "$LOCAL_SHA" == "$REMOTE_SHA" ]]; then
-            echo "No new commit to publish."
-            exit 0
-          fi
+            WALK-FORWARD FEASIBILITY:
+            Evaluate 6 calendar months train / 2 calendar months OOS / 2 calendar months
+            between OOS starts, plus a final chronological 20% holdout.
+            Use actual UTC calendar boundaries and observed timestamps, never fixed
+            month-to-candle conversions. Report exact usable windows and their boundaries.
+            Training data must precede each fold's OOS interval. Do not mislabel ordinary
+            rolling-window reuse as leakage. Do not invent purge horizons; report that
+            purge requirements depend on actual label/maximum holding horizon if not known.
+            This is feasibility only; do not run strategy backtests.
 
-          git merge-base --is-ancestor "$REMOTE_SHA" "$LOCAL_SHA" || {
-            echo "::error::Local work is not a fast-forward of the resume branch; refusing to overwrite remote history."
-            exit 1
-          }
-          git push origin "$LOCAL_SHA:refs/heads/${RESUME_BRANCH}"
-          echo "Published commit $LOCAL_SHA to $RESUME_BRANCH"
-
-      - name: Keep PR creation disabled while validation is paused
-        if: success()
-        run: echo "No PR created: repository owner has prohibited test/backtest execution, and opening a PR would trigger the test workflow."
+            REPORT:
+            Post a concise evidence-rich report as a comment on issue #1, including:
+            repository HEAD inspected; separate BTC and XAU audit tables; WF window counts;
+            provider request counts and elapsed times; limitations; and one decision:
+            BTCUSDT SUITABLE / XAUUSD SUITABLE / BOTH / NEITHER / INSUFFICIENT EVIDENCE.
+            Explain the evidence for the decision.
+            Explicitly confirm that no tracked files, branches, commits, or PRs were changed.
+            If a provider cannot be reached or complete history cannot be retrieved, report
+            the blocker honestly and stop; do not silently substitute another data source.
