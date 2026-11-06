@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: independent-signal-engine-phase0-audit
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   phase0-audit:
@@ -21,7 +21,7 @@ jobs:
       github.event.comment.user.login == github.repository_owner &&
       contains(github.event.comment.body, '/opencode')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
 
     steps:
       - name: Validate owner-only Phase 0 trigger
@@ -51,65 +51,48 @@ jobs:
           agent: build
           use_github_token: true
           prompt: |
-            Perform ONLY Phase 0 read-only historical data audit for this repository.
-            The repository owner explicitly authorized this task by posting /opencode
-            on issue #1. Work from the checked-out current main commit.
+            Complete this bounded, READ-ONLY data audit. Do not perform general
+            repository review, coding, tests, strategy research, or optimization.
 
-            TARGETS:
-            1) BTCUSDT Spot, Binance, 1h.
-            2) XAUUSD, BiQuote, 1h, using the existing adapter
-               signal_engine/data/biquote_source.py.
+            Targets only:
+            - BTCUSDT Spot 1H from Binance public Spot API.
+            - XAUUSD 1H from the existing BiQuote adapter.
 
-            HARD SAFETY AND SCOPE:
-            - This is a READ-ONLY audit. Do not modify tracked files.
-            - Do not create files in the repository, commits, branches, or pull requests.
-            - Temporary scripts/data may be written only under /tmp and must be removed.
-            - Do not run strategy backtests, parameter optimization, market scans, or trades.
-            - Do not change the backtester, walkforward, metrics, risk, strategies, dashboard,
-              perpetual adapters, dependencies, or any application configuration.
-            - Do not access or modify P1 or P2.
-            - Do not use API keys or credentials.
-            - Do not fabricate data, costs, market calendars, or coverage.
-            - Respect provider rate limits; sequential pagination, bounded request pacing,
-              retry only transient errors with a small bounded retry count.
-            - Exclude unfinished candles and retain UTC timestamps.
-            - Do not use the stale OpenCode resume branch or any hard-coded checkpoint.
+            Execute immediately; do not spend time exploring unrelated files.
+            Inspect only the two named adapters and the minimum validation code
+            needed to call them correctly. Use one temporary Python script under
+            /tmp if useful. Install only the project's existing runtime dependencies
+            if required. Do not create repository files.
 
-            DATA RETRIEVAL:
-            Inspect the existing Binance and BiQuote adapters and reuse their validation,
-            pagination, symbol mapping, and closed-candle semantics wherever practical.
-            Retrieve complete available BTCUSDT 1h Spot history with page size <= 1000.
-            Retrieve available XAUUSD 1h history through the existing BiQuote adapter,
-            respecting MAX_LIMIT=1000 and MAX_ELAPSED_SECONDS=90.
-            Do not stitch providers or exchanges.
+            Hard execution budget:
+            - Finish within 10 minutes; leave time to post the report.
+            - Binance: page size <= 1000, at most 100 requests, sequential requests,
+              0.25s minimum pacing, official Binance hosts only, never mix hosts.
+            - BiQuote: use existing adapter, at most 10 pages and 80 seconds total;
+              respect its 1000-bar page limit and exclude open candles.
+            - End both ranges at the latest fully closed UTC 1H boundary.
+            - Stop on provider/rate-limit/validation errors; no unbounded retries.
+            - If a target cannot be completed within its budget, report PARTIAL or
+              INSUFFICIENT EVIDENCE with the exact blocker. Never guess or fabricate.
 
-            AUDIT OUTPUT FOR EACH MARKET:
-            - first and last valid CLOSED candle (UTC)
-            - total valid candles
-            - duplicate timestamps
-            - missing expected intervals and largest gap
-            - total missing intervals
-            - coverage fraction only when a valid expected-market calendar is known
-            - pagination completion/truncation and provider errors
-            - exact request count and elapsed time
-            - data-quality caveats
+            For each target report:
+            first/last closed UTC candle, valid candle count, duplicate timestamps,
+            missing 1H intervals and largest gap, exact request count and elapsed
+            time where observable, pagination truncation, provider errors, and
+            source-specific caveats. Do not claim calendar coverage for XAUUSD
+            without a verified market calendar. For BTCUSDT, treat Spot as 24/7
+            only over the provider's actual listing/history interval.
 
-            WALK-FORWARD FEASIBILITY:
-            Evaluate 6 calendar months train / 2 calendar months OOS / 2 calendar months
-            between OOS starts, plus a final chronological 20% holdout.
-            Use actual UTC calendar boundaries and observed timestamps, never fixed
-            month-to-candle conversions. Report exact usable windows and their boundaries.
-            Training data must precede each fold's OOS interval. Do not mislabel ordinary
-            rolling-window reuse as leakage. Do not invent purge horizons; report that
-            purge requirements depend on actual label/maximum holding horizon if not known.
-            This is feasibility only; do not run strategy backtests.
+            Walk-forward feasibility only: derive chronological UTC calendar
+            windows from observed timestamps for 6-month train / 2-month OOS /
+            2-month OOS-start spacing and a final chronological 20% holdout.
+            Report counts and exact boundaries. Do not run backtests. Do not invent
+            purge/embargo horizons; state that these require the actual label or
+            maximum holding horizon.
 
-            REPORT:
-            Post a concise evidence-rich report as a comment on issue #1, including:
-            repository HEAD inspected; separate BTC and XAU audit tables; WF window counts;
-            provider request counts and elapsed times; limitations; and one decision:
-            BTCUSDT SUITABLE / XAUUSD SUITABLE / BOTH / NEITHER / INSUFFICIENT EVIDENCE.
-            Explain the evidence for the decision.
-            Explicitly confirm that no tracked files, branches, commits, or PRs were changed.
-            If a provider cannot be reached or complete history cannot be retrieved, report
-            the blocker honestly and stop; do not silently substitute another data source.
+            Post one concise evidence-based comment to issue #1. Include inspected
+            main SHA, separate BTC/XAU results, feasibility, limitations, and one
+            decision: BTCUSDT SUITABLE / XAUUSD SUITABLE / BOTH / NEITHER /
+            INSUFFICIENT EVIDENCE. Confirm no tracked files, branches, commits,
+            PRs, P1, or P2 were changed. If the 10-minute budget is reached,
+            stop and post the partial evidence instead of continuing.
