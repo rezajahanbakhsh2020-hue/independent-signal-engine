@@ -179,3 +179,15 @@ def test_nat_datetime_index_rows_are_rejected_and_reported():
     assert report.n_rejected_rows == 1
     assert len(out) == len(df) - 1
     assert not out.index.isna().any()
+
+
+def test_all_nat_datetime_index_raises_with_complete_audit_report():
+    from signal_engine.data.validate import validate_ohlcv
+
+    df = _base(5)
+    df.index = pd.DatetimeIndex([pd.NaT] * len(df))
+    with pytest.raises(DataValidationError, match="All rows rejected") as exc:
+        validate_ohlcv(df)
+    assert exc.value.report is not None
+    assert exc.value.report.n_rejected_rows == len(df)
+    assert exc.value.report.rejection_reasons.get("malformed_timestamp") == len(df)
