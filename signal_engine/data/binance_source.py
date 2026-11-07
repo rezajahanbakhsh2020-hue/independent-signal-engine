@@ -153,7 +153,12 @@ def fetch_range(
             pagination_complete = True
             break
         rows.extend(chunk)
-        last_close_ms = int(chunk[-1][6])
+        try:
+            last_close_ms = int(chunk[-1][6])
+        except (TypeError, ValueError, IndexError, OverflowError) as exc:
+            raise BinanceUnavailableError(
+                "Binance returned a malformed kline close timestamp"
+            ) from exc
         if last_close_ms >= end_ms - 1 or len(chunk) < MAX_LIMIT:
             pagination_complete = True
             break
@@ -165,7 +170,10 @@ def fetch_range(
             "refusing to return an incomplete range"
         )
     if not rows:
-        raise BinanceUnavailableError(f"No klines retrieved from Binance for {market} {tf}")
+        raise BinanceUnavailableError(
+            f"No usable klines retrieved from Binance for {market} {tf}; "
+            f"malformed_klines_skipped={malformed_klines_skipped}"
+        )
 
     records = []
     for k in rows:
