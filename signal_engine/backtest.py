@@ -199,6 +199,7 @@ def backtest(
 
     for t in range(n):
         ts = index[t]
+        position_was_open = t_open is not None
 
         # 1. manage an open position against this candle's range,
         #    stop-first (conservative) when both stop and target are hit.
@@ -230,7 +231,7 @@ def backtest(
         # 2. act on decision to enter (only if flat).  decision[t] is the
         #    raw signal computed from candle t-1 (already shifted).
         sig_side = int(decision[t])
-        if t_open is None and sig_side != 0:
+        if not position_was_open and t_open is None and sig_side != 0:
             atr_val = float(atr_arr[t - 1])  # from signal candle t-1 only
             if not (np.isfinite(atr_val) and atr_val > 0):
                 rejected_zero_atr += 1
@@ -265,6 +266,31 @@ def backtest(
                         qty=sig.position_size,
                         fees=entry_fee,
                     )
+
+        # A position opened at this candle's open is exposed to the rest
+        # of this candle's high/low range. Evaluate its stop/target now;
+        # otherwise entry-candle exits are silently delayed by one bar.
+        if t_open is not None and t_open.entry_ts == ts:
+            side = t_open.side
+            if side == 1:
+                stop_hit = lows[t] <= t_open.stop_price
+                target_hit = highs[t] >= t_open.target_price
+            else:
+                stop_hit = highs[t] >= t_open.stop_price
+                target_hit = lows[t] <= t_open.target_price
+            if stop_hit:
+                gap_price = float(opens[t])
+                if (side == 1 and gap_price < t_open.stop_price) or (
+                    side == -1 and gap_price > t_open.stop_price
+                ):
+                    stop_reference = gap_price
+                else:
+                    stop_reference = t_open.stop_price
+                fill = costs.exit_stop_fill(side, stop_reference)
+                close_position(side, t_open, t, fill, "stop")
+            elif target_hit:
+                fill = costs.exit_target_fill(side, t_open.target_price)
+                close_position(side, t_open, t, fill, "target")
 
         # 3. mark-to-market at close.
         if t_open is not None:

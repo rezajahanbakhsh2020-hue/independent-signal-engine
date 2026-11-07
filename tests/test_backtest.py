@@ -304,3 +304,61 @@ def test_short_end_of_data_liquidation_uses_adverse_market_fill():
     trade = next(trade for trade in result.trades if trade.exit_reason == "end_of_data")
     expected = costs.exit_stop_fill(-1, float(df["close"].iloc[-1]))
     assert trade.exit_price == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(("side", "hit_column", "hit_price"), [
+    (1, "low", 97.0),
+    (-1, "high", 103.0),
+])
+def test_new_position_can_stop_out_on_its_entry_candle(side, hit_column, hit_price):
+    idx = pd.date_range("2024-01-01", periods=8, freq="1h", tz="UTC")
+    df = pd.DataFrame(
+        {"open": np.full(8, 100.0), "high": np.full(8, 101.0),
+         "low": np.full(8, 99.0), "close": np.full(8, 100.0),
+         "volume": np.full(8, 100.0)}, index=idx
+    )
+    df.loc[idx[3], hit_column] = hit_price
+
+    class AlwaysDirectional:
+        name = "always_directional"
+        def raw_direction(self, data):
+            return pd.Series(side, index=data.index, dtype="int64")
+
+    result = backtest(
+        df, AlwaysDirectional(), "BTCUSDT", "1H",
+        RiskConfig(atr_window=3, atr_multiplier=1.0),
+        CostConfig(fee_bps=0.0, spread_bps=0.0, slippage_bps=0.0),
+    )
+    assert result.trades
+    trade = result.trades[0]
+    assert trade.entry_ts == idx[3]
+    assert trade.exit_ts == idx[3]
+    assert trade.exit_reason == "stop"
+
+
+def test_signal_generated_while_position_open_is_not_queued_after_exit():
+    idx = pd.date_range("2024-01-01", periods=9, freq="1h", tz="UTC")
+    df = pd.DataFrame(
+        {"open": np.full(9, 100.0), "high": np.full(9, 101.0),
+         "low": np.full(9, 99.0), "close": np.full(9, 100.0),
+         "volume": np.full(9, 100.0)}, index=idx
+    )
+    df.loc[idx[5], "low"] = 97.0
+
+    class DirectionChangesWhileLong:
+        name = "direction_changes_while_open"
+        def raw_direction(self, data):
+            values = np.zeros(len(data), dtype="int64")
+            values[2] = 1
+            values[4] = -1
+            return pd.Series(values, index=data.index)
+
+    result = backtest(
+        df, DirectionChangesWhileLong(), "BTCUSDT", "1H",
+        RiskConfig(atr_window=3, atr_multiplier=1.0),
+        CostConfig(fee_bps=0.0, spread_bps=0.0, slippage_bps=0.0),
+    )
+    assert len(result.trades) == 1
+    assert result.trades[0].side == 1
+    assert result.trades[0].exit_ts == idx[5]
+    assert result.trades[0].exit_reason == "stop"

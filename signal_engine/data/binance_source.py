@@ -129,12 +129,17 @@ def fetch_range(
     end_utc = as_utc(end_utc, "end_utc")
     if start_utc >= end_utc:
         raise DataValidationError("start_utc must be earlier than end_utc")
+    if max_requests < 1:
+        raise DataValidationError("max_requests must be >= 1")
+    if timeout_seconds <= 0:
+        raise DataValidationError("timeout_seconds must be > 0")
     symbol = BINANCE_SYMBOLS.get(market, market)
     interval = TIMEFRAME_TO_BINANCE[tf]
     start_ms = int(start_utc.timestamp() * 1000)
     end_ms = int(end_utc.timestamp() * 1000)
     rows: list[list] = []
-    fetched_expected_span = 0
+    malformed_klines_skipped = 0
+    pagination_complete = False
     hosts_used: set[str] = set()
     for _ in range(max_requests):
         chunk, host = _fetch_klines_with_host(symbol, interval, start_ms, end_ms, timeout_seconds)
@@ -145,30 +150,48 @@ def fetch_range(
                 + ", ".join(sorted(hosts_used))
             )
         if not chunk:
+            pagination_complete = True
             break
         rows.extend(chunk)
-        fetched_expected_span += len(chunk)
-        last_close_ms = int(chunk[-1][6])
+        try:
+            last_close_ms = int(chunk[-1][6])
+        except (TypeError, ValueError, IndexError, OverflowError) as exc:
+            raise BinanceUnavailableError(
+                "Binance returned a malformed kline close timestamp"
+            ) from exc
         if last_close_ms >= end_ms - 1 or len(chunk) < MAX_LIMIT:
+            pagination_complete = True
             break
         start_ms = last_close_ms + 1
         time.sleep(0.25)  # stay polite under provider rate limits
+    if not pagination_complete:
+        raise BinanceUnavailableError(
+            f"Binance pagination reached max_requests={max_requests}; "
+            "refusing to return an incomplete range"
+        )
     if not rows:
-        raise BinanceUnavailableError(f"No klines retrieved from Binance for {market} {tf}")
+        raise BinanceUnavailableError(
+            f"No usable klines retrieved from Binance for {market} {tf}; "
+            f"malformed_klines_skipped={malformed_klines_skipped}"
+        )
 
     records = []
     for k in rows:
-        open_ms = int(k[0])
         try:
+            if not isinstance(k, (list, tuple)) or len(k) < 6:
+                raise ValueError("unexpected kline row shape")
+            open_ms = int(k[0])
+            stamp = pd.Timestamp(open_ms, unit="ms", tz="UTC")
             o, h, l_, c = (float(k[i]) for i in (1, 2, 3, 4))
             vol = float(k[5])
-        except (TypeError, ValueError):
-            continue  # malformed kline, documented by validation counts later
-        if not (o > 0 and h > 0 and l_ > 0 and c > 0):
+        except (TypeError, ValueError, IndexError, OverflowError):
+            malformed_klines_skipped += 1
             continue
+        # Preserve non-positive OHLC rows for the shared validator so every
+        # rejected price is counted in the validation report.
         records.append(
             {
-                "timestamp": pd.Timestamp(open_ms, unit="ms", tz="UTC"),
+                "timestamp": stamp,
                 "open": o,
                 "high": h,
                 "low": l_,
@@ -185,11 +208,13 @@ def fetch_range(
         raise BinanceUnavailableError(
             f"No klines within requested UTC range for {market} {tf}"
         )
-    df, _rep = validate_ohlcv(raw, strict_gap_policy=True)
+    df, report = validate_ohlcv(raw, strict_gap_policy=True)
 
     retrieval_time = datetime.now(timezone.utc).isoformat()
     df.attrs["source"] = f"public:binance-api-v3:{next(iter(hosts_used))}"
     df.attrs["provider"] = "Binance"
+    df.attrs["validation_report"] = report.as_dict()
+    df.attrs["malformed_klines_skipped"] = malformed_klines_skipped
     df.attrs["symbol_mapping"] = f"{market}->{symbol}"
     df.attrs["timeframe"] = tf
     df.attrs["retrieval_time_utc"] = retrieval_time
