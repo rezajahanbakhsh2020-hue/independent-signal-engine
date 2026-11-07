@@ -164,3 +164,18 @@ def test_tz_aware_timestamps_converted_to_utc():
     df.index = df.index.tz_convert("America/New_York")
     out, _ = validate_ohlcv(df)
     assert str(out.index.tz) == "UTC"
+
+
+
+def test_nat_datetime_index_rows_are_rejected_and_reported():
+    from signal_engine.data.validate import validate_ohlcv
+
+    df = _base(10)
+    index = list(df.index)
+    index[4] = pd.NaT
+    df.index = pd.DatetimeIndex(index)
+    out, report = validate_ohlcv(df)
+    assert report.rejection_reasons.get("malformed_timestamp") == 1
+    assert report.n_rejected_rows == 1
+    assert len(out) == len(df) - 1
+    assert not out.index.isna().any()

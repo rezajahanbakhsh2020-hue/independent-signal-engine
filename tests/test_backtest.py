@@ -252,3 +252,55 @@ def test_turnover_positive_when_trades_exist(synth_1h):
         assert m.turnover_x_equity > 0
     else:
         assert m.turnover_x_equity is None or m.turnover_x_equity == 0
+
+
+@pytest.mark.parametrize(
+    ("side", "gap_open", "gap_high", "gap_low"),
+    [(1, 90.0, 91.0, 89.0), (-1, 110.0, 111.0, 109.0)],
+)
+def test_stop_gap_fills_at_adverse_open(side, gap_open, gap_high, gap_low):
+    """A stop crossed by the next candle's open must not fill at the old stop."""
+    idx = pd.date_range("2024-01-01", periods=8, freq="1h", tz="UTC")
+    opens = np.full(8, 100.0)
+    highs = np.full(8, 101.0)
+    lows = np.full(8, 99.0)
+    closes = np.full(8, 100.0)
+    opens[4], highs[4], lows[4], closes[4] = gap_open, gap_high, gap_low, gap_open
+    df = pd.DataFrame(
+        {"open": opens, "high": highs, "low": lows, "close": closes,
+         "volume": np.full(8, 100.0)}, index=idx
+    )
+
+    class AlwaysDirectional:
+        name = "always_directional"
+
+        def raw_direction(self, data):
+            return pd.Series(side, index=data.index, dtype="int64")
+
+    costs = CostConfig(fee_bps=0.0, spread_bps=0.0, slippage_bps=0.0)
+    result = backtest(df, AlwaysDirectional(), "BTCUSDT", "1H",
+                      RiskConfig(atr_window=3, atr_multiplier=1.0), costs)
+    stopped = next(trade for trade in result.trades if trade.exit_reason == "stop")
+    assert stopped.exit_price == pytest.approx(gap_open)
+
+
+def test_short_end_of_data_liquidation_uses_adverse_market_fill():
+    idx = pd.date_range("2024-01-01", periods=8, freq="1h", tz="UTC")
+    df = pd.DataFrame(
+        {"open": np.full(8, 100.0), "high": np.full(8, 100.1),
+         "low": np.full(8, 99.9), "close": np.full(8, 100.0),
+         "volume": np.full(8, 100.0)}, index=idx
+    )
+
+    class AlwaysShort:
+        name = "always_short"
+
+        def raw_direction(self, data):
+            return pd.Series(-1, index=data.index, dtype="int64")
+
+    costs = CostConfig(fee_bps=0.0, spread_bps=2.0, slippage_bps=1.0)
+    result = backtest(df, AlwaysShort(), "BTCUSDT", "1H",
+                      RiskConfig(atr_window=3, atr_multiplier=2.0), costs)
+    trade = next(trade for trade in result.trades if trade.exit_reason == "end_of_data")
+    expected = costs.exit_stop_fill(-1, float(df["close"].iloc[-1]))
+    assert trade.exit_price == pytest.approx(expected)
