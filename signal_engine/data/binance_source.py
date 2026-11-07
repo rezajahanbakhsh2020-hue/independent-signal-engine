@@ -189,6 +189,7 @@ def fetch_range(
 
     retrieval_time = datetime.now(timezone.utc).isoformat()
     df.attrs["source"] = f"public:binance-api-v3:{next(iter(hosts_used))}"
+    df.attrs["provider"] = "Binance"
     df.attrs["symbol_mapping"] = f"{market}->{symbol}"
     df.attrs["timeframe"] = tf
     df.attrs["retrieval_time_utc"] = retrieval_time
