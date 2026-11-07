@@ -114,6 +114,16 @@ def _check_finite(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFrame:
     return df
 
 
+def _check_positive_prices(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFrame:
+    """Reject zero or negative OHLC prices; they cannot represent valid market bars."""
+    bad = (df[["open", "high", "low", "close"]] <= 0).any(axis=1)
+    n_bad = int(bad.sum())
+    if n_bad:
+        rep.reject("non_positive_ohlc_price", n_bad)
+        df = df[~bad]
+    return df
+
+
 def _check_volume(df: pd.DataFrame, rep: ValidationReport) -> pd.DataFrame:
     neg = df["volume"] < 0
     n_neg = int(neg.sum())
@@ -218,6 +228,7 @@ def validate_ohlcv(
     # 4. numeric coercion and row-level value checks.
     df = _coerce_numeric(df, rep)
     df = _check_finite(df, rep)
+    df = _check_positive_prices(df, rep)
     df = _check_ohlc_relations(df, rep)
     df = _check_volume(df, rep)
 
