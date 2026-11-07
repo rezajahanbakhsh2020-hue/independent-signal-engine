@@ -208,6 +208,10 @@ def validate_ohlcv(
         rep.reject("malformed_timestamp", n_bad_index)
         df = df.iloc[~bad_index_mask]
         index = index[~bad_index_mask]
+    if df.empty:
+        raise DataValidationError(
+            "All rows rejected during timestamp validation", report=rep
+        )
     if not index.empty and (index.tz is None):
         # Naive timestamps: assume they are already UTC (documented assumption).
         index = index.tz_localize("UTC")
