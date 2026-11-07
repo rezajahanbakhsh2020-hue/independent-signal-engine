@@ -12,9 +12,12 @@ Execution semantics (documented, enforced):
     Long exit at stop    = stop  * (1 - spread/2 - slippage)
     Short exit at target = target * (1 + spread/2)          [buy at ask]
     Short exit at stop   = stop  * (1 + spread/2 + slippage)
-- Candle ordering inside a trade: fill at open; for the remainder of
-  the candle, STOP is evaluated before TARGET.  If both levels are hit
-  in the same candle, the STOP is assumed to fill first (conservative).
+- Candle ordering inside a trade: an opening gap through a stop is filled
+  from the adverse open price; otherwise, for the remainder of the candle,
+  STOP is evaluated before TARGET. If both levels are hit in the same candle,
+  the STOP is assumed to fill first (conservative).
+- End-of-data liquidation uses the adverse market-exit fill model for both
+  long and short positions.
 - Fees: percentage fee charged on notional at every fill and deducted
   from equity immediately at fill time.
 - Overlapping trades: never.  At most one open position at any moment.
@@ -208,7 +211,17 @@ def backtest(
                 stop_hit = highs[t] >= t_open.stop_price
                 target_hit = lows[t] <= t_open.target_price
             if stop_hit:
-                fill = costs.exit_stop_fill(side, t_open.stop_price)
+                # A stop crossed by the candle open fills at the open, not
+                # at the stale stop trigger. Apply adverse spread/slippage
+                # to that executable reference price.
+                gap_price = float(opens[t])
+                if (side == 1 and gap_price < t_open.stop_price) or (
+                    side == -1 and gap_price > t_open.stop_price
+                ):
+                    stop_reference = gap_price
+                else:
+                    stop_reference = t_open.stop_price
+                fill = costs.exit_stop_fill(side, stop_reference)
                 close_position(side, t_open, t, fill, "stop")
             elif target_hit:
                 fill = costs.exit_target_fill(side, t_open.target_price)
@@ -266,11 +279,9 @@ def backtest(
 
     # close lingering position at the final candle close (documented).
     if t_open is not None:
-        fill = (
-            costs.exit_stop_fill(t_open.side, float(closes[-1]))
-            if t_open.side == 1
-            else costs.exit_target_fill(t_open.side, float(closes[-1]))
-        )
+        # End-of-data liquidation is a market exit for either direction;
+        # use the adverse stop/market-exit fill model on both sides.
+        fill = costs.exit_stop_fill(t_open.side, float(closes[-1]))
         close_position(t_open.side, t_open, n - 1, fill, "end_of_data")
         eq_curve[-1] = equity
 
