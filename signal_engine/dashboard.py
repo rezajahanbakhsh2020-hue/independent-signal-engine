@@ -136,7 +136,7 @@ def _market_data(market,timeframe,start,end):
     if market=="XAUUSD":
         from signal_engine.data.biquote_source import fetch_range
     else:
-        from signal_engine.data.crypto_source import fetch_range
+        from signal_engine.data.binance_source import fetch_range
     return fetch_range(market,timeframe,start,end)
 
 def _record_events(df,market,timeframe):

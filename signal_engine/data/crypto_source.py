@@ -1,4 +1,8 @@
-"""Fail-closed public crypto OHLCV adapter with bounded provider failover.
+"""Display-only public crypto OHLCV adapter with bounded provider failover.
+
+WARNING: This multi-provider adapter is for dashboard/display use only. Do not
+use it for research, backtesting, or signal generation. Spot research and
+signal data must use the single-source Binance adapter instead.
 
 Bitget is preferred; KuCoin, HTX, and MEXC are fallback public spot sources.
 No credentials or trading endpoints are used.
