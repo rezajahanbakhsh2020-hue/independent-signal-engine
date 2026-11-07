@@ -1,0 +1,65 @@
+name: Independent Signal Engine — Budgeted OpenCode Fix
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  budgeted-code-fix:
+    if: >-
+      github.event.issue.pull_request == null &&
+      github.event.issue.number == 23 &&
+      github.event.comment.user.login == github.repository_owner &&
+      contains(github.event.comment.body, '/opencode')
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    concurrency:
+      group: independent-signal-engine-budgeted-code-fix
+      cancel-in-progress: false
+
+    steps:
+      - name: Validate exact owner-only issue trigger
+        shell: bash
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          [[ "${COMMENT_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]
+          printf '%s\\n' "$COMMENT_BODY" | grep -Eq '(^|[[:space:]])/opencode([[:space:]]|$)'
+
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Configure Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run one budgeted implementation task
+        uses: anomalyco/opencode/github@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/glm-5.3-flash-free
+          agent: surgical-fix
+          mentions: /opencode
+          use_github_token: true
+          prompt: |
+            Implement only the task in owner-authorized issue #23.
+            Read only README.md and signal_engine/data/crypto_source.py.
+            Edit README.md only. Make one minimal documentation correction.
+            Do not inspect other files, use subagents, browse the web, or run
+            tests, backtests, simulations, network requests, or market scans.
+            Create one branch and one PR; never commit to main or merge.
+            If the free model returns any quota/rate-limit error, stop immediately.
