@@ -74,6 +74,20 @@ def test_invalid_ohlc_relationship_rejected():
     assert len(out) == 49
 
 
+def test_non_positive_ohlc_prices_rejected():
+    from signal_engine.data.validate import validate_ohlcv
+
+    df = _base()
+    df.loc[df.index[1], "open"] = 0.0
+    df.loc[df.index[2], "high"] = -1.0
+    df.loc[df.index[3], "low"] = 0.0
+    df.loc[df.index[4], "close"] = -1.0
+    out, rep = validate_ohlcv(df)
+    assert rep.rejection_reasons.get("non_positive_ohlc_price") == 4
+    assert len(out) == len(df) - 4
+    assert (out[["open", "high", "low", "close"]] > 0).all().all()
+
+
 def test_negative_volume_rejected():
     from signal_engine.data.validate import validate_ohlcv
 
