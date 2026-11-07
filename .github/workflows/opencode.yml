@@ -9,12 +9,11 @@ permissions:
   issues: write
   pull-requests: read
 
-concurrency:
-  group: independent-signal-engine-phase0-audit
-  cancel-in-progress: true
-
 jobs:
   phase0-audit:
+    concurrency:
+      group: independent-signal-engine-phase0-audit
+      cancel-in-progress: false
     if: >-
       github.event.issue.pull_request == null &&
       github.event.issue.number == 1 &&
