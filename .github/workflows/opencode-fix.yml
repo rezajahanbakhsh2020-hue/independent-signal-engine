@@ -32,7 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "${COMMENT_AUTHOR,,}" == "${REPOSITORY_OWNER,,}" ]]
-          printf '%s\\n' "$COMMENT_BODY" | grep -Eq '(^|[[:space:]])/opencode([[:space:]]|$)'
+          printf '%s\n' "$COMMENT_BODY" | grep -Eq '(^|[[:space:]])/opencode([[:space:]]|$)'
 
       - name: Checkout current main
         uses: actions/checkout@v4
