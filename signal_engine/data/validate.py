@@ -202,6 +202,12 @@ def validate_ohlcv(
         df = df.drop(columns=[ts_col])
 
     index = pd.DatetimeIndex(df.index, name="timestamp")
+    bad_index_mask = index.isna()
+    n_bad_index = int(bad_index_mask.sum())
+    if n_bad_index:
+        rep.reject("malformed_timestamp", n_bad_index)
+        df = df.iloc[~bad_index_mask]
+        index = index[~bad_index_mask]
     if not index.empty and (index.tz is None):
         # Naive timestamps: assume they are already UTC (documented assumption).
         index = index.tz_localize("UTC")
